@@ -55,6 +55,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
   const github = useRef(new GithubService());
   const db = DatabaseService.getInstance();
 
+  // Sync ref with state whenever state changes
   useEffect(() => {
     projectFilesRef.current = projectFiles;
   }, [projectFiles]);
@@ -94,7 +95,8 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         const nextTask = activeQueue[0];
         const newQueue = activeQueue.slice(1);
         setExecutionQueue(newQueue);
-        handleSend(`EXECUTE PHASE: ${nextTask}. Update files.`, true, newQueue);
+        // Force immediate implementation
+        handleSend(`EXECUTE PHASE: ${nextTask}. IMPLEMENT NOW. DO NOT ASK QUESTIONS. BUILD ON CURRENT CODE.`, true, newQueue);
         return;
       } else {
         setWaitingForApproval(false);
@@ -117,6 +119,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         setSelectedImage(null);
       }
 
+      // Use projectFilesRef.current to get the most UP TO DATE files for AI context
       const res = await gemini.current.generateWebsite(
         promptText, 
         projectFilesRef.current, 
@@ -129,11 +132,12 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
       
       if (res.thought) setLastThought(res.thought);
       
+      // Update local storage and project files carefully
       let updatedFiles = { ...projectFilesRef.current };
-      if (res.files) {
+      if (res.files && Object.keys(res.files).length > 0) {
         updatedFiles = { ...updatedFiles, ...res.files };
         setProjectFiles(updatedFiles);
-        projectFilesRef.current = updatedFiles;
+        projectFilesRef.current = updatedFiles; // Update Ref immediately for next recursive loop
       }
 
       // Handle Master Plan logic
@@ -162,7 +166,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         role: 'assistant', 
         content: assistantResponse, 
         plan: isAuto ? currentPlan : (res.plan || []),
-        questions: res.questions,
+        questions: isAuto ? [] : res.questions,
         timestamp: Date.now(),
         isApproval,
         model: currentModel,
@@ -222,6 +226,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     setCurrentProjectId(project.id);
     localStorage.setItem('active_project_id', project.id);
     setProjectFiles(project.files || {});
+    projectFilesRef.current = project.files || {};
     setProjectConfig(project.config || { appName: 'OneClickApp', packageName: 'com.oneclick.studio', selected_model: 'gemini-3-flash-preview' });
     const paths = Object.keys(project.files || {});
     if (paths.length > 0) {
@@ -234,20 +239,39 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
 
   const handleRollback = async (files: Record<string, string>, message: string) => {
     setProjectFiles(files);
+    projectFilesRef.current = files;
     setPreviewOverride(null);
     setShowHistory(false);
     addToast(`Restored to: ${message}`, 'success');
     if (currentProjectId && user) await db.updateProject(user.id, currentProjectId, files, projectConfig);
   };
 
-  const addFile = (path: string) => { setProjectFiles(prev => ({ ...prev, [path]: '' })); openFile(path); };
+  const addFile = (path: string) => { 
+    setProjectFiles(prev => {
+        const next = { ...prev, [path]: '' };
+        projectFilesRef.current = next;
+        return next;
+    }); 
+    openFile(path); 
+  };
   const deleteFile = (path: string) => {
-    setProjectFiles(prev => { const next = { ...prev }; delete next[path]; return next; });
+    setProjectFiles(prev => { 
+        const next = { ...prev }; 
+        delete next[path]; 
+        projectFilesRef.current = next;
+        return next; 
+    });
     setOpenTabs(prev => prev.filter(t => t !== path));
     if (selectedFile === path) setSelectedFile('');
   };
   const renameFile = (oldPath: string, newPath: string) => {
-    setProjectFiles(prev => { const next = { ...prev }; next[newPath] = next[oldPath]; delete next[oldPath]; return next; });
+    setProjectFiles(prev => { 
+        const next = { ...prev }; 
+        next[newPath] = next[oldPath]; 
+        delete next[oldPath]; 
+        projectFilesRef.current = next;
+        return next; 
+    });
     setOpenTabs(prev => prev.map(t => t === oldPath ? newPath : t));
     if (selectedFile === oldPath) setSelectedFile(newPath);
   };

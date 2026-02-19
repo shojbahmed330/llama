@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { Question } from '../../types';
 
@@ -14,6 +14,12 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ questions, onComplete, on
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [otherText, setOtherText] = useState('');
 
+  // Reset internal state if questions change significantly
+  useEffect(() => {
+    setCurrentIdx(0);
+    setAnswers({});
+  }, [questions]);
+
   if (!questions || questions.length === 0) return null;
 
   const q = questions[currentIdx];
@@ -23,19 +29,26 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ questions, onComplete, on
 
   const toggleOption = (optId: string) => {
     setAnswers(prev => {
-      const current = prev[q.id] || (q.type === 'multiple' ? [] : null);
       if (q.type === 'single') {
+        // If it's already selected, don't do anything (standard radio behavior)
         return { ...prev, [q.id]: optId };
       } else {
-        const next = Array.isArray(current) && current.includes(optId) 
-          ? current.filter((id: string) => id !== optId) 
-          : [...(Array.isArray(current) ? current : []), optId];
+        const currentArr = Array.isArray(prev[q.id]) ? prev[q.id] : [];
+        const next = currentArr.includes(optId) 
+          ? currentArr.filter((id: string) => id !== optId) 
+          : [...currentArr, optId];
         return { ...prev, [q.id]: next };
       }
     });
   };
 
   const handleNext = () => {
+    // Basic validation: user must have selected something for single-choice questions
+    if (q.type === 'single' && !answers[q.id]) {
+      alert("Please select an option to proceed.");
+      return;
+    }
+
     if (isLast) {
       const formattedAnswers = questions.map(question => {
         const ans = answers[question.id];
@@ -71,28 +84,28 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ questions, onComplete, on
         </div>
 
         <div className="space-y-2">
-          {(q.options || []).map(opt => {
+          {(q.options || []).map((opt, i) => {
             const isSelected = q.type === 'single' 
               ? answers[q.id] === opt.id 
               : Array.isArray(answers[q.id]) && answers[q.id].includes(opt.id);
 
             return (
               <button 
-                key={opt.id}
+                key={`${opt.id}-${i}`}
                 onClick={() => toggleOption(opt.id)}
                 className={`w-full text-left p-4 rounded-2xl border transition-all flex items-start gap-4 group ${
                   isSelected 
-                  ? 'bg-pink-600/10 border-pink-500/50 ring-1 ring-pink-500/20' 
+                  ? 'bg-pink-600/10 border-pink-500/50 ring-1 ring-pink-500/20 shadow-[0_0_15px_rgba(236,72,153,0.05)]' 
                   : 'bg-white/5 border-white/5 hover:border-white/20 hover:bg-white/[0.08]'
                 }`}
               >
                 <div className={`w-5 h-5 rounded-full border shrink-0 mt-0.5 flex items-center justify-center transition-all ${
-                  isSelected ? 'border-pink-500 bg-pink-500 shadow-[0_0_10px_#ec4899]' : 'border-zinc-700'
+                  isSelected ? 'border-pink-500 bg-pink-500 shadow-[0_0_10px_#ec4899]' : 'border-zinc-700 bg-black/40'
                 }`}>
                   {isSelected && <Check size={12} className="text-white" />}
                 </div>
                 <div className="flex-1">
-                  <div className={`text-xs font-black uppercase tracking-wide ${isSelected ? 'text-pink-500' : 'text-zinc-400'}`}>
+                  <div className={`text-xs font-black uppercase tracking-wide transition-colors ${isSelected ? 'text-pink-500' : 'text-zinc-400'}`}>
                     {opt.label}
                   </div>
                   {opt.subLabel && <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed line-clamp-2">{opt.subLabel}</p>}
@@ -113,7 +126,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ questions, onComplete, on
             <ChevronLeft size={18}/>
           </button>
           <button 
-            disabled={isLast}
+            disabled={isLast || !answers[q.id]}
             onClick={() => setCurrentIdx(prev => prev + 1)}
             className="p-2 text-zinc-600 hover:text-white disabled:opacity-20 transition-colors bg-white/5 rounded-xl border border-white/5"
           >

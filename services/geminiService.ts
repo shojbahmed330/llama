@@ -10,23 +10,23 @@ Your goal is to build professional hybrid apps using HTML, CSS, and JS.
    - **Atomic (Simple/Small):** UI tweaks, single component (like calculator), bug fixes. -> ACTION: Execute immediately. NO PLAN. No steps. Just do it.
    - **Architectural (Complex/Large):** Full apps (Shopping, Social Media, CRM). -> ACTION: Provide a master plan. Execute Step 1. Ask to proceed. Continue until the WHOLE system is implemented.
 
-2. **COMPLETION SIGNAL:**
-   - When a task or a plan is finished, state: "🚀 Task Completed. The project is fully functional. Would you like to modify or upgrade anything? I am ready for your next directive."
+2. **IMPLEMENTATION FLOW (CRITICAL):**
+   - **NO QUESTIONS DURING PLAN:** While executing an Architectural plan, NEVER ask clarifying questions. Use your best professional judgment to complete the features.
+   - **FULL AUTONOMY:** Implement the required logic, database schema, and UI based on standard best practices for the requested app type.
+   - **STATE PRESERVATION:** You MUST build on top of all files listed in the "PROJECT MAP". Do not ignore or delete existing files unless they need replacement.
+   - **POST-COMPLETION PROTOCOL:** Once the entire project is functional, state: "🚀 Task Completed. The project is fully functional. Would you like to modify or upgrade anything?"
+   - **MODIFICATION PHASE:** Only AFTER the initial implementation is done, if the user asks for a change/modification, ask 1-2 clarifying questions if the request is ambiguous.
 
-3. **MODIFICATION PROTOCOL:**
-   - For any requests AFTER the initial implementation, do NOT auto-code. 
-   - First, ask 1-2 clarifying questions to understand exact requirements.
-   - Once the user answers, apply the changes.
-
-4. **CODE PRESERVATION:**
-   - Build on top of "CURRENT FILES". Do not remove existing logic unless requested.
+3. **CODE PRESERVATION:**
+   - Always build on top of existing code. Return 100% complete content for modified files. 
+   - Ensure paths match exactly (e.g., if index.html is in app/ folder, use app/index.html).
 
 ### 🚀 RESPONSE FORMAT (JSON ONLY):
 {
   "thought": "Internal technical reasoning...",
-  "plan": ["Step 1", "Step 2"] (ONLY for Architectural tasks),
-  "answer": "Clear summary for user...",
-  "questions": [{"id": "q1", "text": "...", "type": "single", "options": [...]}] (Use for modifications),
+  "plan": ["Step 1", "Step 2"] (ONLY for new Architectural tasks),
+  "answer": "Summary for user...",
+  "questions": [] (ONLY allowed after full project completion for ambiguous update requests),
   "files": { "path/to/file.js": "..." }
 }
 
@@ -68,19 +68,23 @@ export class GeminiService {
     const ai = new GoogleGenAI({ apiKey: key });
     
     const filteredFiles: Record<string, string> = {};
-    const fileTree: string[] = [];
+    const fullProjectMap: string[] = Object.keys(currentFiles);
 
+    // AI must always see the context of the active workspace + root files
     Object.keys(currentFiles).forEach(path => {
-      fileTree.push(path);
       if (!activeWorkspace || path.startsWith(activeWorkspace + '/') || !path.includes('/')) {
         filteredFiles[path] = currentFiles[path];
       }
     });
 
-    const contextFiles = `PROJECT MAP:\n${fileTree.join('\n')}\n\nFILE CONTENT:\n${JSON.stringify(filteredFiles)}`;
+    const contextFiles = `PROJECT MAP (All Existing Files):\n${fullProjectMap.join('\n')}\n\nCONTENT OF RELEVANT FILES:\n${JSON.stringify(filteredFiles)}`;
+
+    const flowInstruction = prompt.includes('EXECUTE PHASE') 
+        ? "STRICT: This is a continuation of the plan. Build on top of existing code. Return only the updated or new files."
+        : "If this is a large new project, plan it. If it is an update, build it.";
 
     const parts: any[] = [
-      { text: `CONTEXT:\n${contextFiles}\n\nUSER REQUEST: ${prompt}\n\nINSTRUCTION: If this is an update/mod, ask questions first. If it is a new large app, plan then code.` }
+      { text: `CONTEXT:\n${contextFiles}\n\nUSER REQUEST: ${prompt}\n\nINSTRUCTION: ${flowInstruction}` }
     ];
 
     if (image) parts.push({ inlineData: { data: image.data, mimeType: image.mimeType } });
@@ -112,7 +116,7 @@ export class GeminiService {
     activeWorkspace?: WorkspaceType,
     modelName: string = 'llama3'
   ): Promise<GenerationResult> {
-    const fileTree = Object.keys(currentFiles).join('\n');
+    const fullMap = Object.keys(currentFiles).join('\n');
     const filteredFiles: Record<string, string> = {};
     Object.keys(currentFiles).forEach(path => {
       if (!activeWorkspace || path.startsWith(activeWorkspace + '/') || !path.includes('/')) {
@@ -121,7 +125,11 @@ export class GeminiService {
     });
 
     let targetModel = modelName.replace('-local', '');
-    const fullPrompt = `${SYSTEM_PROMPT}\n\nCONTEXT:\n${fileTree}\n\nFILES:\n${JSON.stringify(filteredFiles)}\n\nUSER REQUEST: ${prompt}`;
+    const flowInstruction = prompt.includes('EXECUTE PHASE') 
+        ? "DO NOT ask any questions. Just implement the code." 
+        : "";
+
+    const fullPrompt = `${SYSTEM_PROMPT}\n\nPROJECT MAP:\n${fullMap}\n\nRELEVANT FILES:\n${JSON.stringify(filteredFiles)}\n\nUSER REQUEST: ${prompt}\n\nINSTRUCTION: ${flowInstruction}`;
 
     try {
       const response = await fetch('http://127.0.0.1:11434/api/chat', {
@@ -148,7 +156,7 @@ export class GeminiService {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       return JSON.parse(jsonMatch ? jsonMatch[0] : content);
     } catch (error: any) {
-      throw new Error("Ollama Connection Failed. Ensure OLLAMA_ORIGINS=\"*\" and Browser Insecure Content is Allowed.");
+      throw new Error("Ollama Connection Failed.");
     }
   }
 }
