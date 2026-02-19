@@ -1,0 +1,9 @@
+{
+  "name": "LLAMA TESTING of Finalizing 2",
+  "description": "AI-powered system for building hybrid Android apps with full hardware access.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
