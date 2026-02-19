@@ -24,16 +24,17 @@ export class GithubService {
         headers,
         body: JSON.stringify({ name: repoName, private: false, auto_init: true })
       });
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise(r => setTimeout(r, 4000));
       
-      // Try to enable pages automatically
-      for (let i = 0; i < 2; i++) {
+      // Try to enable pages for Actions deployment
+      try {
         await fetch(`https://api.github.com/repos/${username}/${repoName}/pages`, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ source: { branch: 'main', path: '/' }, build_type: 'workflow' })
+          body: JSON.stringify({ build_type: 'workflow' })
         });
-        await new Promise(r => setTimeout(r, 1000));
+      } catch (e) {
+        console.warn("Could not auto-enable Pages, it might need manual activation in GitHub Settings.");
       }
     }
 
@@ -53,10 +54,10 @@ export class GithubService {
         'capacitor.config.json': JSON.stringify(capConfig, null, 2)
     };
 
-    // CRITICAL FIX: Ensure app/index.html is ALWAYS present before the workflow runs
+    // USER REQUEST: hi in black color
     const hasEntryHtml = Object.keys(files).some(k => k === 'app/index.html' || k === 'index.html');
     if (!hasEntryHtml) {
-      allFiles['app/index.html'] = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Mobile App</title></head><body><div id='root'>Initializing AI Source...</div></body></html>";
+      allFiles['app/index.html'] = "<!DOCTYPE html><html><head><title>App</title><style>body{background:white;color:black;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-weight:bold;font-size:2rem;}</style></head><body>hi</body></html>";
     }
 
     if (appConfig?.icon) allFiles['assets/icon-only.png'] = appConfig.icon;
@@ -79,11 +80,10 @@ export class GithubService {
       await fetch(`${baseUrl}/contents/${path}`, {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `${customMessage || "Sync Engine"} [${path}]`, content: finalContent, sha })
+        body: JSON.stringify({ message: `${customMessage || "Uplink Sync"} [${path}]`, content: finalContent, sha })
       });
     }
 
-    // Push the fixed workflow
     const workflowPath = '.github/workflows/android.yml';
     const getWorkflowRes = await fetch(`${baseUrl}/contents/${workflowPath}`, { headers });
     let workflowSha: string | undefined;

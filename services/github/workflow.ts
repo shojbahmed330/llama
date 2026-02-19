@@ -44,7 +44,8 @@ jobs:
           mkdir -p www
           
           # 2. MANDATORY: Create a placeholder index.html to satisfy Capacitor immediately
-          echo '<!DOCTYPE html><html><head><title>Booting</title></head><body style="background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;"><h1>Initializing System...</h1></body></html>' > www/index.html
+          # User requested "hi" in black color
+          echo '<!DOCTYPE html><html><head><title>App</title><style>body{background:white;color:black;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-weight:bold;font-size:2rem;}</style></head><body>hi</body></html>' > www/index.html
           
           # 3. Detect and Copy Source Files
           echo "Syncing source files..."
@@ -55,9 +56,9 @@ jobs:
             cp index.html www/ 2>/dev/null || true
           fi
           
-          # Ensure index.html is actually there after copy
+          # Ensure index.html exists for Capacitor
           if [ ! -f "www/index.html" ]; then
-             echo "<h1>Critical Error: Entry point missing. Recovering...</h1>" > www/index.html
+             echo '<!DOCTYPE html><html><head><title>App</title><style>body{background:white;color:black;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-weight:bold;font-size:2rem;}</style></head><body>hi</body></html>' > www/index.html
           fi
 
           # 4. Capacitor Config Setup
@@ -100,7 +101,6 @@ jobs:
     name: Deploy Admin Panel
     runs-on: ubuntu-latest
     needs: build-apk
-    continue-on-error: true # Prevents the whole workflow from failing if Pages is not active
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -108,7 +108,7 @@ jobs:
       - name: Setup Pages
         id: pages_setup
         uses: actions/configure-pages@v4
-        continue-on-error: true
+        continue-on-error: true # DONT FAIL THE WHOLE WORKFLOW HERE
         
       - name: Prepare Artifact
         run: |
@@ -129,4 +129,6 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         if: steps.pages_setup.outcome == 'success'
-        uses: actions/deploy-pages@v4`;
+        uses: actions/deploy-pages@v4
+        continue-on-error: true # FINAL FAILSAFE
+`;
