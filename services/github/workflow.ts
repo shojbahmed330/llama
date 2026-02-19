@@ -43,30 +43,27 @@ jobs:
           rm -rf www android
           mkdir -p www
           
-          # 2. MANDATORY: Create a placeholder index.html to satisfy Capacitor immediately
-          # User requested "hi" in black color
-          echo '<!DOCTYPE html><html><head><title>App</title><style>body{background:white;color:black;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-weight:bold;font-size:2rem;}</style></head><body>hi</body></html>' > www/index.html
+          # 2. First copy root files as base (fallback)
+          echo "Copying root files to build directory..."
+          find . -maxdepth 1 -type f -not -name "capacitor.config.json" -not -name "package.json" -not -name "package-lock.json" -not -name ".*" -exec cp {} www/ \; || true
           
-          # 3. Detect and Copy Source Files
-          echo "Syncing source files..."
+          # 3. CRITICAL: Override with app directory content (User's Mobile App)
           if [ -d "app" ]; then
-            cp -r app/* www/ 2>/dev/null || true
-          fi
-          if [ -f "index.html" ]; then
-            cp index.html www/ 2>/dev/null || true
+            echo "Priority Sync: Overwriting with app/ contents..."
+            cp -rf app/* www/ 2>/dev/null || true
           fi
           
-          # Ensure index.html exists for Capacitor
+          # 4. Final Failsafe - Ensure index.html exists
           if [ ! -f "www/index.html" ]; then
              echo '<!DOCTYPE html><html><head><title>App</title><style>body{background:white;color:black;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-weight:bold;font-size:2rem;}</style></head><body>hi</body></html>' > www/index.html
           fi
 
-          # 4. Capacitor Config Setup
+          # 5. Capacitor Config Setup
           echo '{"appId": "com.oneclick.studio", "appName": "OneClickApp", "webDir": "www", "bundledWebRuntime": false}' > capacitor.config.json
           if [ ! -f package.json ]; then npm init -y; fi
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
           
-          # 5. Native Project Generation
+          # 6. Native Project Generation
           npx cap add android
           
           # Fix Gradle/Java 21 compatibility in build.gradle
@@ -74,10 +71,10 @@ jobs:
             sed -i 's/JavaVersion.VERSION_17/JavaVersion.VERSION_21/g' android/app/build.gradle
           fi
           
-          # 6. Final Sync
+          # 7. Final Sync
           npx cap sync android
           
-          # 7. Production Build
+          # 8. Production Build
           if [ -f android/app/release-key.jks ]; then
             echo "Production Keystore Found. Executing Signed Build..."
             cd android && chmod +x gradlew
@@ -108,7 +105,7 @@ jobs:
       - name: Setup Pages
         id: pages_setup
         uses: actions/configure-pages@v4
-        continue-on-error: true # DONT FAIL THE WHOLE WORKFLOW HERE
+        continue-on-error: true
         
       - name: Prepare Artifact
         run: |
@@ -130,5 +127,5 @@ jobs:
         id: deployment
         if: steps.pages_setup.outcome == 'success'
         uses: actions/deploy-pages@v4
-        continue-on-error: true # FINAL FAILSAFE
+        continue-on-error: true
 `;
