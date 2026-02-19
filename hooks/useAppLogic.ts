@@ -75,22 +75,14 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     reader.readAsDataURL(file);
   };
 
-  const saveProjectToDB = async (updatedFiles?: Record<string, string>, updatedMessages?: ChatMessage[]) => {
-    if (currentProjectId && user) {
-      await db.supabase.from('projects').update({ 
-        files: updatedFiles || projectFilesRef.current, 
-        messages: updatedMessages || messages,
-        config: projectConfig,
-        updated_at: new Date().toISOString() 
-      }).eq('id', currentProjectId);
-    }
-  };
-
   const handleSend = async (customPrompt?: string, isAuto: boolean = false, overrideQueue?: string[]) => {
     if (isGenerating && !isAuto) return;
     const promptText = (customPrompt || input).trim();
     const activeQueue = overrideQueue !== undefined ? overrideQueue : executionQueue;
     
+    // Crucial: Always get the latest model from projectConfig state
+    const currentModel = projectConfig.selected_model || 'gemini-3-flash-preview';
+
     if (waitingForApproval && !isAuto) {
       const lowerInput = promptText.toLowerCase();
       if (['yes', 'ha', 'proceed', 'y'].includes(lowerInput)) {
@@ -100,6 +92,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         const nextTask = activeQueue[0];
         const newQueue = activeQueue.slice(1);
         setExecutionQueue(newQueue);
+        // Recursively call handleSend but force the current model context
         handleSend(`EXECUTE PHASE: ${nextTask}. IMPLEMENT NOW.`, true, newQueue);
         return;
       } else {
@@ -110,7 +103,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
       }
     }
 
-    const currentModel = projectConfig.selected_model || 'gemini-3-flash-preview';
     setIsGenerating(true);
     setCurrentAction("Engineering Node...");
     
@@ -127,7 +119,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
       }
 
       const assistantId = (Date.now() + 1).toString();
-      setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: Date.now() }]);
+      setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: Date.now(), model: currentModel }]);
 
       let fullJsonString = '';
       let streamedAnswer = '';
@@ -210,7 +202,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
 
       if (currentProjectId && user) {
         await db.updateProject(user.id, currentProjectId, updatedFiles, projectConfig);
-        // Specifically update messages in the DB
         await db.supabase.from('projects').update({ messages: finalMessages }).eq('id', currentProjectId);
       }
     } catch (err: any) {
@@ -226,7 +217,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     localStorage.setItem('active_project_id', project.id);
     setProjectFiles(project.files || {});
     projectFilesRef.current = project.files || {};
-    // Load messages specific to this project or empty if new
     setMessages(project.messages || []);
     setProjectConfig(project.config || { appName: 'OneClickApp', packageName: 'com.oneclick.studio', selected_model: 'gemini-3-flash-preview' });
   };
