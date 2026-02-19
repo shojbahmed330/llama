@@ -49,14 +49,18 @@ export class GithubService {
     let sanitizedAppId = (appConfig?.packageName || 'com.oneclick.studio').toLowerCase().replace(/[^a-z0-9.]/g, '');
     const capConfig = { appId: sanitizedAppId, appName: appConfig?.appName || 'OneClickApp', webDir: 'www' };
     
-    const allFiles: Record<string, string> = { ...files };
+    // CRITICAL: Isolate App workspace from Admin workspace during bundling
+    const appOnlyFiles = Object.fromEntries(
+        Object.entries(files).filter(([path]) => path.startsWith('app/') || !path.includes('/'))
+    );
 
-    // CRITICAL: Bundle the app code for production build
-    // This replicates the preview logic to ensure JS/CSS execution on physical devices
     const entryPath = files['app/index.html'] ? 'app/index.html' : 'index.html';
-    const bundledAppHtml = buildFinalHtml(files, entryPath, appConfig);
+    const bundledAppHtml = buildFinalHtml(appOnlyFiles, entryPath, appConfig);
+    
+    const allFiles: Record<string, string> = { ...files };
     
     // We overwrite app/index.html with the self-contained version for the APK build
+    // This ensures no relative path issues on physical devices
     allFiles['app/index.html'] = bundledAppHtml;
     allFiles['capacitor.config.json'] = JSON.stringify(capConfig, null, 2);
 

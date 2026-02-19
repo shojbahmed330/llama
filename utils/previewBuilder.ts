@@ -11,7 +11,18 @@ export const buildFinalHtml = (projectFiles: Record<string, string>, entryPath: 
   const polyfill = `
     <script>
       ${supabaseConfig}
+      // Mobile Error Monitor
       window.onerror = function(message, source, lineno, colno, error) {
+        const errorMsg = 'SYSTEM_ERROR: ' + message + ' at ' + (source ? source.split('/').pop() : 'inline') + ':' + lineno;
+        console.error(errorMsg);
+        // Show visible error on mobile for debugging if it happens in the first 5 seconds
+        if (window.innerHeight < 1000) {
+           const div = document.createElement('div');
+           div.style = "position:fixed;bottom:0;left:0;right:0;background:rgba(220,38,38,0.9);color:white;padding:10px;font-size:10px;z-index:99999;font-family:monospace;word-break:break-all;";
+           div.innerText = errorMsg;
+           document.body.appendChild(div);
+           setTimeout(() => div.remove(), 8000);
+        }
         window.parent.postMessage({
           type: 'RUNTIME_ERROR',
           error: { message, line: lineno, source: source ? source.split('/').pop() : 'index.html' }
@@ -40,8 +51,19 @@ export const buildFinalHtml = (projectFiles: Record<string, string>, entryPath: 
     .map(([path, content]) => `/* --- FILE: ${path} --- */\n${content}`)
     .join('\n');
     
-  const jsContent = Object.entries(projectFiles)
-    .filter(([path, content]) => path.endsWith('.js') && content.length > 0)
+  // Sort JS files: index/app/main files last to ensure dependencies are loaded
+  const jsFiles = Object.entries(projectFiles)
+    .filter(([path, content]) => path.endsWith('.js') && content.length > 0);
+  
+  jsFiles.sort(([a], [b]) => {
+     const isMainA = a.includes('index') || a.includes('app') || a.includes('main') || a.includes('script');
+     const isMainB = b.includes('index') || b.includes('app') || b.includes('main') || b.includes('script');
+     if (isMainA && !isMainB) return 1;
+     if (!isMainA && isMainB) return -1;
+     return 0;
+  });
+
+  const jsContent = jsFiles
     .map(([path, content]) => `// --- FILE: ${path} ---\ntry {\n${content}\n} catch(e) { console.error("Error in ${path}:", e); }\n`)
     .join('\n');
   
