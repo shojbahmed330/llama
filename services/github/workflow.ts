@@ -39,51 +39,44 @@ jobs:
 
       - name: Initialize and Build
         run: |
-          # Cleanup and Prep
+          # 1. Cleanup and Prepare Directory
           rm -rf www android
           mkdir -p www
           
-          echo "Detecting Project Structure..."
+          # 2. MANDATORY: Create a placeholder index.html to satisfy Capacitor immediately
+          echo '<!DOCTYPE html><html><head><title>Booting</title></head><body style="background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;"><h1>Initializing System...</h1></body></html>' > www/index.html
           
-          # Priority 1: app/ folder
-          if [ -d "app" ] && [ -f "app/index.html" ]; then
-            echo "Using 'app/' as source."
-            cp -r app/* www/
-          # Priority 2: Root index.html
-          elif [ -f "index.html" ]; then
-            echo "Using root directory as source."
-            cp index.html www/
-            cp *.js www/ 2>/dev/null || true
-            cp *.css www/ 2>/dev/null || true
-          # Priority 3: Any app/ contents
-          elif [ -d "app" ]; then
-             echo "Partial 'app/' folder found. Copying contents..."
-             cp -r app/* www/
+          # 3. Detect and Copy Source Files
+          echo "Syncing source files..."
+          if [ -d "app" ]; then
+            cp -r app/* www/ 2>/dev/null || true
           fi
-
-          # CRITICAL: Capacitor requires www/index.html
+          if [ -f "index.html" ]; then
+            cp index.html www/ 2>/dev/null || true
+          fi
+          
+          # Ensure index.html is actually there after copy
           if [ ! -f "www/index.html" ]; then
-            echo "WARNING: No index.html found in assets. Creating recovery entry point."
-            echo '<!DOCTYPE html><html><head><title>App Initializing</title><style>body{background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;}</style></head><body><div><h1>System Booting...</h1><p>Please wait for the first AI sync.</p></div></body></html>' > www/index.html
+             echo "<h1>Critical Error: Entry point missing. Recovering...</h1>" > www/index.html
           fi
 
-          # Capacitor Setup
+          # 4. Capacitor Config Setup
           echo '{"appId": "com.oneclick.studio", "appName": "OneClickApp", "webDir": "www", "bundledWebRuntime": false}' > capacitor.config.json
           if [ ! -f package.json ]; then npm init -y; fi
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
           
-          # Add and Sync
+          # 5. Native Project Generation
           npx cap add android
           
-          # Fix Gradle/Java 21 compatibility
+          # Fix Gradle/Java 21 compatibility in build.gradle
           if [ -f "android/app/build.gradle" ]; then
             sed -i 's/JavaVersion.VERSION_17/JavaVersion.VERSION_21/g' android/app/build.gradle
           fi
           
-          # Sync handles copy and plugin management
+          # 6. Final Sync
           npx cap sync android
           
-          # Build Native Binary
+          # 7. Production Build
           if [ -f android/app/release-key.jks ]; then
             echo "Production Keystore Found. Executing Signed Build..."
             cd android && chmod +x gradlew
@@ -107,28 +100,33 @@ jobs:
     name: Deploy Admin Panel
     runs-on: ubuntu-latest
     needs: build-apk
+    continue-on-error: true # Prevents the whole workflow from failing if Pages is not active
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       
       - name: Setup Pages
+        id: pages_setup
         uses: actions/configure-pages@v4
+        continue-on-error: true
         
-      - name: Upload Artifact
+      - name: Prepare Artifact
         run: |
           mkdir -p public_admin
           if [ -d "admin" ] && [ -f "admin/index.html" ]; then
-            echo "Deploying Admin Panel..."
+            echo "Admin source found. Packaging..."
             cp -r admin/* public_admin/
           else
-            echo "<h1>Admin panel not generated for this project.</h1>" > public_admin/index.html
+            echo "<h1>Admin node not found. This project might only contain a mobile app.</h1>" > public_admin/index.html
           fi
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
+        if: steps.pages_setup.outcome == 'success'
         with:
           path: 'public_admin/'
 
       - name: Deploy to GitHub Pages
         id: deployment
+        if: steps.pages_setup.outcome == 'success'
         uses: actions/deploy-pages@v4`;

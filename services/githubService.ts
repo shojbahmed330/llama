@@ -26,14 +26,14 @@ export class GithubService {
       });
       await new Promise(r => setTimeout(r, 3000));
       
-      for (let i = 0; i < 3; i++) {
-        const pagesRes = await fetch(`https://api.github.com/repos/${username}/${repoName}/pages`, {
+      // Try to enable pages automatically
+      for (let i = 0; i < 2; i++) {
+        await fetch(`https://api.github.com/repos/${username}/${repoName}/pages`, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ build_type: 'workflow' })
+          body: JSON.stringify({ source: { branch: 'main', path: '/' }, build_type: 'workflow' })
         });
-        if (pagesRes.ok) break;
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
 
@@ -53,10 +53,10 @@ export class GithubService {
         'capacitor.config.json': JSON.stringify(capConfig, null, 2)
     };
 
-    // Ensure app/index.html exists even in empty state to satisfy Capacitor
-    const hasIndexHtml = Object.keys(files).some(k => k === 'app/index.html' || k === 'index.html');
-    if (!hasIndexHtml) {
-      allFiles['app/index.html'] = "<!DOCTYPE html><html><head><title>App</title></head><body><h1>Initializing Workspace...</h1></body></html>";
+    // CRITICAL FIX: Ensure app/index.html is ALWAYS present before the workflow runs
+    const hasEntryHtml = Object.keys(files).some(k => k === 'app/index.html' || k === 'index.html');
+    if (!hasEntryHtml) {
+      allFiles['app/index.html'] = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Mobile App</title></head><body><div id='root'>Initializing AI Source...</div></body></html>";
     }
 
     if (appConfig?.icon) allFiles['assets/icon-only.png'] = appConfig.icon;
@@ -79,10 +79,11 @@ export class GithubService {
       await fetch(`${baseUrl}/contents/${path}`, {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `${customMessage || "Sync"} [${path}]`, content: finalContent, sha })
+        body: JSON.stringify({ message: `${customMessage || "Sync Engine"} [${path}]`, content: finalContent, sha })
       });
     }
 
+    // Push the fixed workflow
     const workflowPath = '.github/workflows/android.yml';
     const getWorkflowRes = await fetch(`${baseUrl}/contents/${workflowPath}`, { headers });
     let workflowSha: string | undefined;
@@ -103,7 +104,7 @@ export class GithubService {
       method: 'PUT',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        message: `Trigger Build Engine [${workflowPath}]`, 
+        message: `Uplink Build Engine [${workflowPath}]`, 
         content: toBase64(finalWorkflow), 
         sha: workflowSha 
       })
@@ -112,15 +113,17 @@ export class GithubService {
 
   async getRunDetails(config: GithubConfig) {
     const headers = { 'Authorization': `token ${config.token}`, 'Accept': 'application/vnd.github.v3+json' };
-    const runsRes = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/actions/runs?per_page=1`, { headers });
-    if (!runsRes.ok) return null;
-    const data = await runsRes.json();
-    const latestRun = data.workflow_runs?.[0];
-    if (!latestRun) return null;
+    try {
+      const runsRes = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/actions/runs?per_page=1`, { headers });
+      if (!runsRes.ok) return null;
+      const data = await runsRes.json();
+      const latestRun = data.workflow_runs?.[0];
+      if (!latestRun) return null;
 
-    const jobsRes = await fetch(latestRun.jobs_url, { headers });
-    const jobsData = await jobsRes.json();
-    return { run: latestRun, jobs: jobsData.jobs || [] };
+      const jobsRes = await fetch(latestRun.jobs_url, { headers });
+      const jobsData = await jobsRes.json();
+      return { run: latestRun, jobs: jobsData.jobs || [] };
+    } catch (e) { return null; }
   }
 
   async getLatestApk(config: GithubConfig) {
