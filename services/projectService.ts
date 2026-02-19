@@ -32,7 +32,13 @@ export const projectService = {
   },
 
   async saveProject(userId: string, name: string, files: Record<string, string>, config?: ProjectConfig) {
-    const { data, error } = await supabase.from('projects').insert({ user_id: userId, name, files, config }).select().single();
+    const { data, error } = await supabase.from('projects').insert({ 
+      user_id: userId, 
+      name, 
+      files, 
+      config,
+      messages: [] // Start with empty history for new projects
+    }).select().single();
     if (error) throw error;
     return data;
   },

@@ -75,6 +75,17 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     reader.readAsDataURL(file);
   };
 
+  const saveProjectToDB = async (updatedFiles?: Record<string, string>, updatedMessages?: ChatMessage[]) => {
+    if (currentProjectId && user) {
+      await db.supabase.from('projects').update({ 
+        files: updatedFiles || projectFilesRef.current, 
+        messages: updatedMessages || messages,
+        config: projectConfig,
+        updated_at: new Date().toISOString() 
+      }).eq('id', currentProjectId);
+    }
+  };
+
   const handleSend = async (customPrompt?: string, isAuto: boolean = false, overrideQueue?: string[]) => {
     if (isGenerating && !isAuto) return;
     const promptText = (customPrompt || input).trim();
@@ -84,7 +95,8 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
       const lowerInput = promptText.toLowerCase();
       if (['yes', 'ha', 'proceed', 'y'].includes(lowerInput)) {
         setWaitingForApproval(false);
-        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: "Yes, proceed.", timestamp: Date.now() }]);
+        const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', content: "Yes, proceed.", timestamp: Date.now() };
+        setMessages(prev => [...prev, userMsg]);
         const nextTask = activeQueue[0];
         const newQueue = activeQueue.slice(1);
         setExecutionQueue(newQueue);
@@ -104,8 +116,12 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     
     try {
       const currentImage = selectedImage ? { data: selectedImage.data, mimeType: selectedImage.mimeType } : undefined;
+      let currentMessages = [...messages];
+      
       if (!isAuto) {
-        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: promptText, image: selectedImage?.preview, timestamp: Date.now() }]);
+        const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', content: promptText, image: selectedImage?.preview, timestamp: Date.now() };
+        currentMessages.push(userMsg);
+        setMessages(currentMessages);
         setInput('');
         setSelectedImage(null);
       }
@@ -119,7 +135,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
       const stream = gemini.current.generateWebsiteStream(
         promptText, 
         projectFilesRef.current, 
-        messages, 
+        currentMessages, 
         currentImage, 
         projectConfig, 
         workspace,
@@ -129,7 +145,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
       for await (const chunk of stream) {
         fullJsonString += chunk;
         
-        // Try to show progress in UI as stream arrives
         if (fullJsonString.includes('"answer":')) {
            setCurrentAction("Writing Response...");
         } else if (fullJsonString.includes('"files":')) {
@@ -138,8 +153,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
            setCurrentAction("Reasoning Protocol...");
         }
 
-        // Live typing logic for the answer part
-        // We look for the answer property in the growing JSON string
         try {
           const match = fullJsonString.match(/"answer":\s*"([^"]*)"/);
           if (match && match[1]) {
@@ -179,19 +192,26 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         isApproval = true;
       }
 
-      setMessages(prev => prev.map(m => m.id === assistantId ? { 
-        ...m, 
+      const finalAssistantMsg: ChatMessage = { 
+        id: assistantId, 
+        role: 'assistant',
         content: finalAssistantResponse, 
         plan: isAuto ? currentPlan : (res.plan || []),
         questions: res.questions,
         isApproval,
         model: currentModel,
         files: res.files,
-        thought: res.thought
-      } : m));
+        thought: res.thought,
+        timestamp: Date.now()
+      };
+
+      const finalMessages = [...currentMessages, finalAssistantMsg];
+      setMessages(finalMessages);
 
       if (currentProjectId && user) {
         await db.updateProject(user.id, currentProjectId, updatedFiles, projectConfig);
+        // Specifically update messages in the DB
+        await db.supabase.from('projects').update({ messages: finalMessages }).eq('id', currentProjectId);
       }
     } catch (err: any) {
       addToast(err.message, 'error');
@@ -206,6 +226,8 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     localStorage.setItem('active_project_id', project.id);
     setProjectFiles(project.files || {});
     projectFilesRef.current = project.files || {};
+    // Load messages specific to this project or empty if new
+    setMessages(project.messages || []);
     setProjectConfig(project.config || { appName: 'OneClickApp', packageName: 'com.oneclick.studio', selected_model: 'gemini-3-flash-preview' });
   };
 

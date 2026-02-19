@@ -42,6 +42,7 @@ export interface Project {
   user_id: string;
   name: string;
   files: Record<string, string>;
+  messages?: ChatMessage[]; // New: Store messages per project
   config?: ProjectConfig;
   created_at: string;
   updated_at: string;
@@ -81,6 +82,7 @@ export interface ChatMessage {
   thought?: string;
   plan?: string[];
   isApproval?: boolean;
+  model?: string;
 }
 
 export interface Package {
