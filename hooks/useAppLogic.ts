@@ -52,7 +52,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
   });
 
   const gemini = useRef(new GeminiService());
-  // Fix: Use correct GithubService instead of duplicate GeminiService
   const github = useRef(new GithubService());
   const db = DatabaseService.getInstance();
 
@@ -69,7 +68,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // Fix: Implement handleImageSelect for processing user uploads
   const handleImageSelect = (file: File) => {
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -101,6 +99,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
       } else {
         setWaitingForApproval(false);
         setExecutionQueue([]);
+        setCurrentPlan([]);
         setInput('');
         return;
       }
@@ -108,7 +107,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
 
     const currentModel = projectConfig.selected_model || 'gemini-3-flash-preview';
     setIsGenerating(true);
-    setCurrentAction(currentModel.includes('local') ? `Initializing Local ${currentModel}...` : "Initializing Cloud Intelligence...");
+    setCurrentAction("Engineering Node...");
     
     try {
       const currentImage = selectedImage ? { data: selectedImage.data, mimeType: selectedImage.mimeType } : undefined;
@@ -118,7 +117,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         setSelectedImage(null);
       }
 
-      setCurrentAction(`Using ${currentModel}...`);
       const res = await gemini.current.generateWebsite(
         promptText, 
         projectFilesRef.current, 
@@ -138,11 +136,14 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         projectFilesRef.current = updatedFiles;
       }
 
-      let nextPlan = currentPlan;
-      if (res.plan && res.plan.length > 0 && !isAuto) {
-        nextPlan = res.plan;
-        setCurrentPlan(res.plan);
-        setExecutionQueue(res.plan.slice(1));
+      // Handle Master Plan logic
+      let nextPlan = res.plan || [];
+      if (nextPlan.length > 0 && !isAuto) {
+        setCurrentPlan(nextPlan);
+        setExecutionQueue(nextPlan.slice(1));
+      } else if (nextPlan.length === 0 && !isAuto) {
+        setCurrentPlan([]);
+        setExecutionQueue([]);
       }
 
       const hasMoreSteps = (isAuto && activeQueue.length > 0) || (!isAuto && nextPlan.length > 1);
@@ -160,7 +161,8 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         id: (Date.now() + 1).toString(),
         role: 'assistant', 
         content: assistantResponse, 
-        plan: res.plan || (isAuto ? currentPlan : []),
+        plan: isAuto ? currentPlan : (res.plan || []),
+        questions: res.questions,
         timestamp: Date.now(),
         isApproval,
         model: currentModel,
@@ -178,7 +180,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     }
   };
 
-  // Fix: Implement full handleBuildAPK logic
   const handleBuildAPK = async (onMissingConfig: () => void) => {
     if (!user) return;
     if (!githubConfig.token || !githubConfig.owner || !githubConfig.repo) {
@@ -187,65 +188,41 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     }
     
     setBuildStatus({ status: 'pushing', message: 'Syncing source code to GitHub...', apkUrl: '', webUrl: '', runUrl: '' });
-    setBuildSteps([
-      { name: 'Source Synchronization', status: 'in_progress', conclusion: null }
-    ]);
+    setBuildSteps([{ name: 'Source Synchronization', status: 'in_progress', conclusion: null }]);
 
     try {
       const githubService = new GithubService();
       await githubService.pushToGithub(githubConfig, projectFiles, projectConfig);
-      
       setBuildSteps(prev => [
         { ...prev[0], status: 'completed', conclusion: 'success' },
         { name: 'Build Engine Triggered', status: 'in_progress', conclusion: null }
       ]);
       
-      setBuildStatus({ status: 'building', message: 'GitHub Actions is compiling your project...', apkUrl: '', webUrl: '', runUrl: '' });
+      setBuildStatus({ status: 'building', message: 'GitHub Actions is compiling...', apkUrl: '', webUrl: '', runUrl: '' });
       
       let attempts = 0;
       const poll = setInterval(async () => {
         attempts++;
-        if (attempts > 60) {
-          clearInterval(poll);
-          setBuildStatus({ status: 'idle', message: 'Build timed out. Please check GitHub Actions.' });
-          return;
-        }
+        if (attempts > 60) { clearInterval(poll); setBuildStatus({ status: 'idle', message: 'Build timed out.' }); return; }
 
         const res = await githubService.getLatestApk(githubConfig);
         if (res && res.downloadUrl) {
           clearInterval(poll);
-          setBuildStatus({ 
-            status: 'success', 
-            message: 'Build completed successfully!', 
-            apkUrl: res.downloadUrl, 
-            webUrl: res.webUrl,
-            runUrl: res.runUrl 
-          });
-          setBuildSteps(prev => [
-            prev[0],
-            { name: 'Build Engine Triggered', status: 'completed', conclusion: 'success' },
-            { name: 'Binary Generation', status: 'completed', conclusion: 'success' }
-          ]);
+          setBuildStatus({ status: 'success', message: 'Build success!', apkUrl: res.downloadUrl, webUrl: res.webUrl, runUrl: res.runUrl });
+          setBuildSteps(prev => [prev[0], { name: 'Build Engine Triggered', status: 'completed', conclusion: 'success' }, { name: 'Binary Generation', status: 'completed', conclusion: 'success' }]);
         }
       }, 10000);
-
     } catch (err: any) {
       addToast(err.message, 'error');
       setBuildStatus({ status: 'idle', message: err.message });
     }
   };
 
-  // Fix: Implement missing loadProject function
   const loadProject = (project: Project) => {
     setCurrentProjectId(project.id);
     localStorage.setItem('active_project_id', project.id);
     setProjectFiles(project.files || {});
-    setProjectConfig(project.config || { 
-      appName: 'OneClickApp', 
-      packageName: 'com.oneclick.studio',
-      selected_model: 'gemini-3-flash-preview'
-    });
-    
+    setProjectConfig(project.config || { appName: 'OneClickApp', packageName: 'com.oneclick.studio', selected_model: 'gemini-3-flash-preview' });
     const paths = Object.keys(project.files || {});
     if (paths.length > 0) {
       const entry = paths.find(p => p.includes('index.html')) || paths[0];
@@ -255,94 +232,42 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     addToast(`Project ${project.name} loaded`, 'success');
   };
 
-  // Fix: Implement handleRollback for restoring project versions
   const handleRollback = async (files: Record<string, string>, message: string) => {
     setProjectFiles(files);
     setPreviewOverride(null);
     setShowHistory(false);
     addToast(`Restored to: ${message}`, 'success');
-    if (currentProjectId && user) {
-      await db.updateProject(user.id, currentProjectId, files, projectConfig);
-    }
+    if (currentProjectId && user) await db.updateProject(user.id, currentProjectId, files, projectConfig);
   };
 
-  // Fix: Implement file system management functions
-  const addFile = (path: string) => {
-    setProjectFiles(prev => ({ ...prev, [path]: '' }));
-    openFile(path);
-  };
-
+  const addFile = (path: string) => { setProjectFiles(prev => ({ ...prev, [path]: '' })); openFile(path); };
   const deleteFile = (path: string) => {
-    setProjectFiles(prev => {
-      const next = { ...prev };
-      delete next[path];
-      return next;
-    });
+    setProjectFiles(prev => { const next = { ...prev }; delete next[path]; return next; });
     setOpenTabs(prev => prev.filter(t => t !== path));
-    if (selectedFile === path) {
-      setSelectedFile('');
-    }
+    if (selectedFile === path) setSelectedFile('');
   };
-
   const renameFile = (oldPath: string, newPath: string) => {
-    setProjectFiles(prev => {
-      const next = { ...prev };
-      next[newPath] = next[oldPath];
-      delete next[oldPath];
-      return next;
-    });
+    setProjectFiles(prev => { const next = { ...prev }; next[newPath] = next[oldPath]; delete next[oldPath]; return next; });
     setOpenTabs(prev => prev.map(t => t === oldPath ? newPath : t));
-    if (selectedFile === oldPath) {
-      setSelectedFile(newPath);
-    }
+    if (selectedFile === oldPath) setSelectedFile(newPath);
   };
-
-  const openFile = (path: string) => {
-    setSelectedFile(path);
-    if (!openTabs.includes(path)) {
-      setOpenTabs(prev => [...prev, path]);
-    }
-  };
-
+  const openFile = (path: string) => { setSelectedFile(path); if (!openTabs.includes(path)) setOpenTabs(prev => [...prev, path]); };
   const closeFile = (path: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     const nextTabs = openTabs.filter(t => t !== path);
     setOpenTabs(nextTabs);
-    if (selectedFile === path) {
-      setSelectedFile(nextTabs.length > 0 ? nextTabs[nextTabs.length - 1] : '');
-    }
+    if (selectedFile === path) setSelectedFile(nextTabs.length > 0 ? nextTabs[nextTabs.length - 1] : '');
   };
-
-  // Fix: Add missing history-related functions
   const refreshHistory = async () => {
     if (!currentProjectId) return;
     setIsHistoryLoading(true);
-    try {
-      const data = await db.getProjectHistory(currentProjectId);
-      setHistory(data);
-    } catch (e) {
-      addToast("Failed to fetch history", "error");
-    } finally {
-      setIsHistoryLoading(false);
-    }
+    try { setHistory(await db.getProjectHistory(currentProjectId)); } finally { setIsHistoryLoading(false); }
   };
-
   const handleDeleteSnapshot = async (id: string) => {
-    if (!window.confirm("Delete this version forever?")) return;
-    try {
-      await db.deleteProjectSnapshot(id);
-      setHistory(prev => prev.filter(h => h.id !== id));
-      addToast("Snapshot deleted", "success");
-    } catch (e) {
-      addToast("Failed to delete snapshot", "error");
-    }
+    if (!window.confirm("Delete snapshot?")) return;
+    await db.deleteProjectSnapshot(id);
+    setHistory(prev => prev.filter(h => h.id !== id));
   };
-
-  useEffect(() => {
-    if (showHistory && currentProjectId) {
-      refreshHistory();
-    }
-  }, [showHistory, currentProjectId]);
 
   return {
     currentProjectId, workspace, setWorkspace, mobileTab, setMobileTab,
@@ -354,7 +279,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     setSelectedImage, handleImageSelect, history, isHistoryLoading, showHistory,
     setShowHistory, handleRollback, previewOverride, setPreviewOverride,
     githubConfig, setGithubConfig, handleSend, handleBuildAPK,
-    handleSecureDownload: () => addToast("Preparing secure download...", "info"),
+    handleSecureDownload: () => addToast("Preparing download...", "info"),
     loadProject, addFile, deleteFile, renameFile, openFile, closeFile, waitingForApproval,
     refreshHistory, handleDeleteSnapshot
   };
