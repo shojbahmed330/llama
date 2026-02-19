@@ -70,7 +70,7 @@ const BuildStatusDisplay: React.FC<BuildStatusDisplayProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-6">
               {/* MOBILE SIDE */}
-              <div className="p-8 bg-white/5 border border-white/10 rounded-[2.5rem] space-y-6">
+              <div className="p-6 md:p-8 bg-white/5 border border-white/10 rounded-[2.5rem] space-y-6">
                 <div className="flex items-center gap-3 justify-center mb-4">
                   <Smartphone className="text-pink-500" size={20}/>
                   <h3 className="text-sm font-black uppercase tracking-widest text-white">Mobile Build</h3>
@@ -81,7 +81,7 @@ const BuildStatusDisplay: React.FC<BuildStatusDisplayProps> = ({
                 <div className="space-y-2">
                   <button 
                     onClick={handleSecureDownload} 
-                    className="w-full flex items-center justify-center gap-3 py-4 bg-pink-600 hover:bg-pink-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all active:scale-95"
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-pink-600 hover:bg-pink-500 text-white rounded-2xl font-black uppercase text-[9px] tracking-tight md:tracking-normal shadow-xl transition-all active:scale-95 px-2"
                   >
                     <Download size={14}/> Download APK (ZIP)
                   </button>
@@ -90,7 +90,7 @@ const BuildStatusDisplay: React.FC<BuildStatusDisplayProps> = ({
               </div>
 
               {/* WEB SIDE */}
-              <div className="p-8 bg-white/5 border border-white/10 rounded-[2.5rem] space-y-6">
+              <div className="p-6 md:p-8 bg-white/5 border border-white/10 rounded-[2.5rem] space-y-6">
                 <div className="flex items-center gap-3 justify-center mb-4">
                   <Globe className="text-indigo-500" size={20}/>
                   <h3 className="text-sm font-black uppercase tracking-widest text-white">Admin Web</h3>
@@ -102,7 +102,7 @@ const BuildStatusDisplay: React.FC<BuildStatusDisplayProps> = ({
                 <div className="space-y-2">
                    <button 
                      onClick={() => webUrl && window.open(webUrl, '_blank')}
-                     className="w-full flex items-center justify-center gap-3 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all active:scale-95"
+                     className="w-full flex items-center justify-center gap-2 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase text-[9px] tracking-tight md:tracking-normal shadow-xl transition-all active:scale-95 px-2"
                    >
                      <ExternalLink size={14}/> Open Admin Panel
                    </button>

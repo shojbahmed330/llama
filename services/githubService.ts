@@ -2,6 +2,7 @@
 import { GithubConfig, ProjectConfig } from "../types";
 import { WORKFLOW_YAML } from "./github/workflow";
 import { toBase64 } from "./github/utils";
+import { buildFinalHtml } from "../utils/previewBuilder";
 
 export class GithubService {
   async createRepo(token: string, repoName: string): Promise<string> {
@@ -26,7 +27,6 @@ export class GithubService {
       });
       await new Promise(r => setTimeout(r, 4000));
       
-      // Try to enable pages for Actions deployment
       try {
         await fetch(`https://api.github.com/repos/${username}/${repoName}/pages`, {
           method: 'POST',
@@ -34,7 +34,7 @@ export class GithubService {
           body: JSON.stringify({ build_type: 'workflow' })
         });
       } catch (e) {
-        console.warn("Could not auto-enable Pages, it might need manual activation in GitHub Settings.");
+        console.warn("Could not auto-enable Pages.");
       }
     }
 
@@ -49,16 +49,16 @@ export class GithubService {
     let sanitizedAppId = (appConfig?.packageName || 'com.oneclick.studio').toLowerCase().replace(/[^a-z0-9.]/g, '');
     const capConfig = { appId: sanitizedAppId, appName: appConfig?.appName || 'OneClickApp', webDir: 'www' };
     
-    const allFiles: Record<string, string> = { 
-        ...files, 
-        'capacitor.config.json': JSON.stringify(capConfig, null, 2)
-    };
+    const allFiles: Record<string, string> = { ...files };
 
-    // USER REQUEST: hi in black color
-    const hasEntryHtml = Object.keys(files).some(k => k === 'app/index.html' || k === 'index.html');
-    if (!hasEntryHtml) {
-      allFiles['app/index.html'] = "<!DOCTYPE html><html><head><title>App</title><style>body{background:white;color:black;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-weight:bold;font-size:2rem;}</style></head><body>hi</body></html>";
-    }
+    // CRITICAL: Bundle the app code for production build
+    // This replicates the preview logic to ensure JS/CSS execution on physical devices
+    const entryPath = files['app/index.html'] ? 'app/index.html' : 'index.html';
+    const bundledAppHtml = buildFinalHtml(files, entryPath, appConfig);
+    
+    // We overwrite app/index.html with the self-contained version for the APK build
+    allFiles['app/index.html'] = bundledAppHtml;
+    allFiles['capacitor.config.json'] = JSON.stringify(capConfig, null, 2);
 
     if (appConfig?.icon) allFiles['assets/icon-only.png'] = appConfig.icon;
     if (appConfig?.keystore_base64) allFiles['android/app/release-key.jks'] = appConfig.keystore_base64;
@@ -80,7 +80,7 @@ export class GithubService {
       await fetch(`${baseUrl}/contents/${path}`, {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `${customMessage || "Uplink Sync"} [${path}]`, content: finalContent, sha })
+        body: JSON.stringify({ message: `${customMessage || "Production Bundle"} [${path}]`, content: finalContent, sha })
       });
     }
 
