@@ -42,11 +42,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
       <div className={`
         flex items-center gap-4 bg-white/5 border rounded-2xl p-2 transition-all
-        ${(isGenerating || isQueued) ? 'border-pink-500/40' : 'border-white/10 focus-within:border-pink-500/40'}
+        ${isGenerating ? 'border-pink-500/40' : 'border-white/10 focus-within:border-pink-500/40'}
       `}>
          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={onFileChange} />
          <button 
-           disabled={isGenerating || isQueued}
+           disabled={isGenerating}
            onClick={() => fileInputRef.current?.click()} 
            className="p-3 text-zinc-500 hover:text-white transition-colors disabled:opacity-20"
          >
@@ -54,11 +54,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
          </button>
 
          <textarea 
-           disabled={isGenerating || isQueued}
+           disabled={isGenerating}
            value={input} 
            onChange={e => setInput(e.target.value)} 
            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())} 
-           placeholder={isQueued ? "Engineering phase active..." : t('chat.placeholder')} 
+           placeholder={isGenerating ? "Neural Core is processing..." : (isQueued ? "Waiting for approval or next step..." : t('chat.placeholder'))} 
            className="flex-1 bg-transparent py-3 text-sm outline-none text-white resize-none max-h-32" 
            rows={1}
          />
@@ -74,7 +74,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
          ) : (
            <button 
              onClick={handleSend} 
-             disabled={isQueued || (!input.trim() && !selectedImage)} 
+             disabled={!input.trim() && !selectedImage} 
              className="p-4 bg-pink-600 text-white rounded-xl active:scale-95 disabled:bg-zinc-800 disabled:text-zinc-600 transition-all shadow-lg"
            >
              <Send size={18}/>
