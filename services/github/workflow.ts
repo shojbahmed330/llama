@@ -43,15 +43,28 @@ jobs:
           rm -rf www android
           mkdir -p www
           
-          # Copy app files if they exist, otherwise use fallback
-          if [ -d "app" ]; then
+          echo "Detecting Project Structure..."
+          
+          # Priority 1: app/ folder
+          if [ -d "app" ] && [ -f "app/index.html" ]; then
+            echo "Using 'app/' as source."
             cp -r app/* www/
+          # Priority 2: Root index.html
           elif [ -f "index.html" ]; then
+            echo "Using root directory as source."
             cp index.html www/
             cp *.js www/ 2>/dev/null || true
             cp *.css www/ 2>/dev/null || true
-          else
-            echo "<h1>System initializing...</h1>" > www/index.html
+          # Priority 3: Any app/ contents
+          elif [ -d "app" ]; then
+             echo "Partial 'app/' folder found. Copying contents..."
+             cp -r app/* www/
+          fi
+
+          # CRITICAL: Capacitor requires www/index.html
+          if [ ! -f "www/index.html" ]; then
+            echo "WARNING: No index.html found in assets. Creating recovery entry point."
+            echo '<!DOCTYPE html><html><head><title>App Initializing</title><style>body{background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;}</style></head><body><div><h1>System Booting...</h1><p>Please wait for the first AI sync.</p></div></body></html>' > www/index.html
           fi
 
           # Capacitor Setup
@@ -59,6 +72,7 @@ jobs:
           if [ ! -f package.json ]; then npm init -y; fi
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
           
+          # Add and Sync
           npx cap add android
           
           # Fix Gradle/Java 21 compatibility
@@ -66,9 +80,10 @@ jobs:
             sed -i 's/JavaVersion.VERSION_17/JavaVersion.VERSION_21/g' android/app/build.gradle
           fi
           
-          npx cap copy android
+          # Sync handles copy and plugin management
+          npx cap sync android
           
-          # Signing Logic
+          # Build Native Binary
           if [ -f android/app/release-key.jks ]; then
             echo "Production Keystore Found. Executing Signed Build..."
             cd android && chmod +x gradlew
@@ -102,7 +117,8 @@ jobs:
       - name: Upload Artifact
         run: |
           mkdir -p public_admin
-          if [ -d "admin" ]; then
+          if [ -d "admin" ] && [ -f "admin/index.html" ]; then
+            echo "Deploying Admin Panel..."
             cp -r admin/* public_admin/
           else
             echo "<h1>Admin panel not generated for this project.</h1>" > public_admin/index.html
