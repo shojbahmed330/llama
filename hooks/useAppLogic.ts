@@ -58,7 +58,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
 
   useEffect(() => {
     projectFilesRef.current = projectFiles;
-    // If current selected file is deleted, pick another one
     if (selectedFile && !projectFiles[selectedFile]) {
       const keys = Object.keys(projectFiles);
       if (keys.length > 0) setSelectedFile(keys[0]);
@@ -130,7 +129,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     delete newFiles[oldPath];
     newFiles[newPath] = content;
     setProjectFiles(newFiles);
-    
     setOpenTabs(prev => prev.map(t => t === oldPath ? newPath : t));
     if (selectedFile === oldPath) setSelectedFile(newPath);
   };
@@ -138,25 +136,22 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
   const handleSend = async (customPrompt?: string, isAuto: boolean = false, overrideQueue?: string[]) => {
     if (isGenerating && !isAuto) return;
     const promptText = (customPrompt || input).trim();
+    if (!promptText && !selectedImage) return;
+
     const activeQueue = overrideQueue !== undefined ? overrideQueue : executionQueue;
-    
     const currentModel = projectConfig.selected_model || 'gemini-3-flash-preview';
 
+    // Handle Approval or Answer from Questionnaire
     if (waitingForApproval && !isAuto) {
       const lowerInput = promptText.toLowerCase();
-      if (['yes', 'ha', 'proceed', 'y'].includes(lowerInput)) {
+      if (['yes', 'ha', 'proceed', 'y', 'correct'].includes(lowerInput)) {
         setWaitingForApproval(false);
         const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', content: "Yes, proceed.", timestamp: Date.now() };
         setMessages(prev => [...prev, userMsg]);
         const nextTask = activeQueue[0];
         const newQueue = activeQueue.slice(1);
         setExecutionQueue(newQueue);
-        handleSend(`EXECUTE PHASE: ${nextTask}. IMPLEMENT NOW.`, true, newQueue);
-        return;
-      } else {
-        setWaitingForApproval(false);
-        setExecutionQueue([]);
-        setCurrentPlan([]);
+        handleSend(`DECISION: User confirmed. Execute the plan: ${nextTask}`, true, newQueue);
         return;
       }
     }
@@ -170,7 +165,13 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
       let currentMessages = [...messages];
       
       if (!isAuto) {
-        const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', content: promptText, image: selectedImage?.preview, timestamp: Date.now() };
+        const userMsg: ChatMessage = { 
+          id: Date.now().toString(), 
+          role: 'user', 
+          content: promptText, 
+          image: selectedImage?.preview, 
+          timestamp: Date.now() 
+        };
         currentMessages.push(userMsg);
         setMessages(currentMessages);
         setInput('');
@@ -198,11 +199,13 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         fullJsonString += chunk;
         
         if (fullJsonString.includes('"answer":')) {
-           setCurrentAction("Writing Response...");
+           setCurrentAction("Drafting Implementation...");
         } else if (fullJsonString.includes('"files":')) {
-           setCurrentAction("Synthesizing Code...");
+           setCurrentAction("Writing Production Code...");
+        } else if (fullJsonString.includes('"questions":')) {
+           setCurrentAction("Analyzing Requirements...");
         } else {
-           setCurrentAction("Reasoning Protocol...");
+           setCurrentAction("Consulting Architect Swarm...");
         }
 
         try {
@@ -226,9 +229,9 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         setProjectFiles(updatedFiles);
         projectFilesRef.current = updatedFiles;
         
-        // Auto-open newly created or modified files
         const firstFile = Object.keys(res.files)[0];
         if (firstFile) openFile(firstFile);
+        addToast("Files implemented successfully!", "success");
       }
 
       let nextPlan = res.plan || [];
@@ -243,7 +246,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
 
       if (hasMoreSteps) {
         const nextStepName = isAuto ? activeQueue[0] : nextPlan[1];
-        finalAssistantResponse += `\n\n**Next Step:** ${nextStepName}\nShall I proceed?`;
+        finalAssistantResponse += `\n\n**Next Objective:** ${nextStepName}\nShall I proceed with implementation?`;
         setWaitingForApproval(true);
         isApproval = true;
       }
@@ -289,7 +292,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     setMessages(project.messages || []);
     setProjectConfig(project.config || { appName: 'OneClickApp', packageName: 'com.oneclick.studio', selected_model: 'gemini-3-flash-preview' });
     
-    // Select first file on load
     const keys = Object.keys(project.files || {});
     if (keys.length > 0) {
       setSelectedFile(keys[0]);
