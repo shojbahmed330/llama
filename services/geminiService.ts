@@ -42,16 +42,19 @@ export class GeminiService {
     modelName: string = 'gemini-3-flash-preview'
   ): Promise<GenerationResult> {
     
-    // 1. Route to local model if selected
-    const isLocal = modelName.includes('local') || modelName.includes('ollama') || modelName.includes('qwen');
+    // Comprehensive check for local models based on name patterns
+    const isLocal = modelName.includes('local') || 
+                    modelName.includes('ollama') || 
+                    modelName.includes('qwen') || 
+                    (modelName.includes(':') && !modelName.startsWith('gemini'));
+
     if (isLocal) {
       return this.generateWithOllama(prompt, currentFiles, history, image, activeWorkspace, modelName);
     }
 
-    // 2. Only check for API_KEY if using Cloud Gemini models
     const key = process.env.API_KEY;
     if (!key || key === "undefined") {
-      throw new Error("Cloud AI Error: API_KEY not found in Vercel environment. Please use a local model or set the API_KEY.");
+      throw new Error("Cloud AI Error: API_KEY not found. Please use a local model or set the API_KEY.");
     }
 
     const ai = new GoogleGenAI({ apiKey: key });
@@ -111,26 +114,13 @@ export class GeminiService {
       }
     });
 
-    // Clean model name for Ollama
-    const targetModel = modelName.replace('-local', '');
-
-    const fullPrompt = `
-    ${SYSTEM_PROMPT}
-
-    CONTEXT:
-    PROJECT MAP:
-    ${fileTree}
-
-    RELEVANT FILES:
-    ${JSON.stringify(filteredFiles)}
-
-    USER REQUEST:
-    ${prompt}
-
-    RESPONSE (JSON ONLY):`;
+    // Handle name cleanup for Ollama request
+    let targetModel = modelName.replace('-local', '');
+    
+    const fullPrompt = `${SYSTEM_PROMPT}\n\nCONTEXT:\n${fileTree}\n\nRELEVANT FILES:\n${JSON.stringify(filteredFiles)}\n\nUSER REQUEST: ${prompt}`;
 
     try {
-      const response = await fetch('http://localhost:11434/api/chat', {
+      const response = await fetch('http://127.0.0.1:11434/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -145,19 +135,30 @@ export class GeminiService {
         })
       });
 
-      if (!response.ok) throw new Error(`Ollama connection failed (HTTP ${response.status}). Ensure Ollama is running at :11434 and OLLAMA_ORIGINS="*" is set.`);
+      if (response.status === 404) {
+        throw new Error(`মডেল "${targetModel}" ওলামাতে পাওয়া যায়নি। আপনার পিসিতে ওলামা চালু করে মডেলটি সচল করুন।`);
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Ollama Error ${response.status}: ${errorText || 'OLLAMA_ORIGINS="*" সেট করা আছে কিনা চেক করুন।'}`);
+      }
       
       const data = await response.json();
       const content = data.message.content;
       
-      // Attempt to clean JSON if model returns extra text
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       const cleanContent = jsonMatch ? jsonMatch[0] : content;
       
       return JSON.parse(cleanContent);
     } catch (error: any) {
-      console.error("Ollama Error:", error);
-      throw new Error(`Local Model Error: ${error.message}. Make sure Ollama is serve-ing with proper CORS settings.`);
+      console.error("Ollama Diagnostic:", error);
+      
+      if (error.message.includes('fetch') || error.name === 'TypeError') {
+        throw new Error("ব্রাউজার কানেকশন ব্লক করছে। ব্রাউজার বারে 🔒 আইকন থেকে 'Insecure Content' Allow করুন।");
+      }
+      
+      throw error;
     }
   }
 }

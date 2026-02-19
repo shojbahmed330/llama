@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { ArrowLeft, Box, Image as ImageIcon, Smartphone, Save, Globe, ShieldAlert, Database, Key as KeyIcon, Zap, ShieldCheck, Lock, Eye, EyeOff, FileKey, AlertTriangle, BookOpen, Terminal, Copy, Check, Wand2, Download, Cpu } from 'lucide-react';
+import { ArrowLeft, Box, Image as ImageIcon, Smartphone, Save, Globe, ShieldAlert, Database, Key as KeyIcon, Zap, ShieldCheck, Lock, Eye, EyeOff, FileKey, AlertTriangle, BookOpen, Terminal, Copy, Check, Wand2, Download, Cpu, TerminalSquare, HelpCircle } from 'lucide-react';
 import { ProjectConfig } from '../../types';
 import { KeystoreService } from '../../services/keystoreService';
 
@@ -15,9 +15,8 @@ const AppConfigView: React.FC<AppConfigViewProps> = ({ config, onUpdate, onBack 
   const splashInputRef = useRef<HTMLInputElement>(null);
   const keystoreInputRef = useRef<HTMLInputElement>(null);
   const [showPasswords, setShowPasswords] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
-  const [copiedCmd, setCopiedCmd] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [showTroubleshoot, setShowTroubleshoot] = useState(false);
 
   useEffect(() => {
     if (!config.key_alias && config.appName) {
@@ -35,13 +34,6 @@ const AppConfigView: React.FC<AppConfigViewProps> = ({ config, onUpdate, onBack 
 
   const sanitizePackageName = (val: string) => val.toLowerCase().replace(/\s+/g, '').replace(/-/g, '_').replace(/[^a-z0-9._]/g, '');
   const isSigned = !!config.keystore_base64;
-  const keystoreCommand = KeystoreService.getKeystoreCommand(config.packageName || 'com.example.app', config.appName || 'My_App');
-
-  const copyCommand = () => {
-    navigator.clipboard.writeText(keystoreCommand);
-    setCopiedCmd(true);
-    setTimeout(() => setCopiedCmd(false), 2000);
-  };
 
   const handleInstantGenerate = () => {
     setGenerating(true);
@@ -55,8 +47,8 @@ const AppConfigView: React.FC<AppConfigViewProps> = ({ config, onUpdate, onBack 
   const aiModels = [
     { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash (Cloud)' },
     { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Cloud)' },
-    { id: 'llama3-local', name: 'Llama 3 (Local via Ollama)' },
-    { id: 'qwen2.5-coder-local', name: 'Qwen 2.5 Coder (Local)' }
+    { id: 'qwen3-coder:480b-cloud', name: 'Qwen3 Coder 480B (Local)' },
+    { id: 'llama3-local', name: 'Llama 3 (Local)' }
   ];
 
   return (
@@ -78,31 +70,79 @@ const AppConfigView: React.FC<AppConfigViewProps> = ({ config, onUpdate, onBack 
           </button>
         </div>
 
-        {/* AI MODEL SELECTOR - Added here to keep UI clean */}
+        {/* AI MODEL SELECTOR */}
         <div className="glass-tech p-8 rounded-[3rem] border-pink-500/20 bg-gradient-to-br from-pink-600/5 to-transparent space-y-6">
-           <div className="flex items-center gap-4">
-              <div className="p-3 bg-pink-500/10 text-pink-500 rounded-2xl"><Cpu size={24}/></div>
-              <div>
-                 <h3 className="text-xl font-black uppercase tracking-tight text-white">AI Neural Engine</h3>
-                 <p className="text-[10px] font-black uppercase text-pink-500 tracking-[0.3em]">Select target intelligence core</p>
+           <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-pink-500/10 text-pink-500 rounded-2xl"><Cpu size={24}/></div>
+                <div>
+                   <h3 className="text-xl font-black uppercase tracking-tight text-white">AI Neural Engine</h3>
+                   <p className="text-[10px] font-black uppercase text-pink-500 tracking-[0.3em]">Select target intelligence core</p>
+                </div>
               </div>
+              <button 
+                onClick={() => setShowTroubleshoot(!showTroubleshoot)}
+                className="p-3 bg-white/5 rounded-2xl text-zinc-500 hover:text-white transition-all flex items-center gap-2"
+              >
+                <HelpCircle size={18}/>
+                <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">Troubleshoot Local</span>
+              </button>
            </div>
+           
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {aiModels.map(model => (
                 <button 
                   key={model.id}
                   onClick={() => onUpdate({ ...config, selected_model: model.id })}
-                  className={`p-5 rounded-2xl border text-left transition-all ${config.selected_model === model.id ? 'bg-pink-600 border-pink-500 text-white shadow-lg' : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'}`}
+                  className={`p-5 rounded-2xl border text-left transition-all relative overflow-hidden group ${config.selected_model === model.id ? 'bg-pink-600 border-pink-500 text-white shadow-lg' : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'}`}
                 >
-                  <div className="text-xs font-black uppercase tracking-widest">{model.name}</div>
-                  {model.id.includes('local') && <div className="text-[8px] mt-1 opacity-60">Requires local Ollama instance</div>}
+                  <div className="text-xs font-black uppercase tracking-widest relative z-10">{model.name}</div>
+                  {(model.id.includes('local') || model.id.includes('qwen') || model.id.includes('cloud')) && !model.id.startsWith('gemini') && <div className="text-[8px] mt-1 opacity-60 font-bold relative z-10">OLLAMA HOST</div>}
+                  {config.selected_model === model.id && (
+                     <div className="absolute -right-2 -bottom-2 opacity-20 transform rotate-12">
+                        <Check size={48}/>
+                     </div>
+                  )}
                 </button>
               ))}
            </div>
-           {config.selected_model?.includes('local') && (
-              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-3">
-                 <AlertTriangle size={14} className="text-amber-500 shrink-0"/>
-                 <p className="text-[9px] font-black text-amber-500 uppercase">Ensure Ollama is running with OLLAMA_ORIGINS="*" env variable.</p>
+
+           {showTroubleshoot && (
+              <div className="p-8 bg-blue-500/5 border border-blue-500/20 rounded-[2.5rem] space-y-6 animate-in slide-in-from-top-4">
+                 <div className="flex items-center gap-3">
+                    <ShieldAlert size={20} className="text-blue-400"/>
+                    <span className="text-xs font-black text-white uppercase tracking-widest">লোকাল কানেকশন সমস্যার সমাধান:</span>
+                 </div>
+                 <div className="space-y-4 text-[11px] font-bold text-zinc-400 leading-loose uppercase">
+                    <div className="flex gap-4">
+                       <div className="w-6 h-6 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">১</div>
+                       <p>ব্রাউজারের অ্যাড্রেস বারের বাঁদিকের 🔒 আইকনে ক্লিক করুন &rarr; Site Settings &rarr; <span className="text-white">Insecure Content / Mixed Content</span> অপশনটি 'Allow' করে দিন।</p>
+                    </div>
+                    <div className="flex gap-4">
+                       <div className="w-6 h-6 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">২</div>
+                       <p>আপনার ওলামা সার্ভারে এই মডেলটি সচল আছে কিনা নিশ্চিত করুন।</p>
+                    </div>
+                    <div className="flex gap-4">
+                       <div className="w-6 h-6 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">৩</div>
+                       <p>Ollama বন্ধ করে CMD-তে <code className="text-blue-400">set OLLAMA_ORIGINS=*</code> লিখে তারপর আবার Ollama চালু করুন।</p>
+                    </div>
+                 </div>
+              </div>
+           )}
+
+           {config.selected_model && (config.selected_model.includes('local') || config.selected_model.includes('qwen')) && !showTroubleshoot && (
+              <div className="p-6 bg-amber-500/5 border border-amber-500/20 rounded-[2rem] space-y-4">
+                 <div className="flex items-center gap-3">
+                    <TerminalSquare size={18} className="text-amber-500"/>
+                    <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Local Engine Active</span>
+                 </div>
+                 <div className="space-y-3">
+                    <p className="text-[9px] text-zinc-500 font-bold uppercase">পিসির Ollama সার্ভারে নিচের মডেলটি সচল থাকতে হবে:</p>
+                    <div className="bg-black/40 p-4 rounded-xl font-mono text-xs text-amber-400 border border-white/5 flex items-center justify-between">
+                       <code>{config.selected_model}</code>
+                       <button onClick={() => navigator.clipboard.writeText(config.selected_model || '')} className="p-2 hover:bg-white/5 rounded-lg transition-all"><Copy size={14}/></button>
+                    </div>
+                 </div>
               </div>
            )}
         </div>
