@@ -49,11 +49,30 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
   const [showHistory, setShowHistory] = useState(false);
   const [previewOverride, setPreviewOverride] = useState<Record<string, string> | null>(null);
   
-  const [githubConfig, setGithubConfig] = useState<GithubConfig>({ 
-    token: user?.github_token || '', 
-    owner: user?.github_owner || '', 
-    repo: user?.github_repo || '' 
+  // Persisted Config with LocalStorage Fallback
+  const [githubConfig, setGithubConfigState] = useState<GithubConfig>(() => {
+    const cached = localStorage.getItem('gh_config_cache');
+    if (cached) return JSON.parse(cached);
+    return { token: '', owner: '', repo: '' };
   });
+
+  const setGithubConfig = (config: GithubConfig) => {
+    setGithubConfigState(config);
+    localStorage.setItem('gh_config_cache', JSON.stringify(config));
+  };
+
+  // Sync state when user object loads or changes
+  useEffect(() => {
+    if (user) {
+      const dbConfig = { 
+        token: user.github_token || githubConfig.token || '', 
+        owner: user.github_owner || githubConfig.owner || '', 
+        repo: user.github_repo || githubConfig.repo || '' 
+      };
+      setGithubConfigState(dbConfig);
+      localStorage.setItem('gh_config_cache', JSON.stringify(dbConfig));
+    }
+  }, [user]);
 
   const gemini = useRef(new GeminiService());
   const github = useRef(new GithubService());
