@@ -24,7 +24,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   waitingForApproval
 }) => {
   return (
-    <section className={`w-full lg:w-[520px] border-r border-white/5 flex flex-col bg-[#09090b] h-full relative ${mobileTab === 'preview' ? 'hidden lg:flex' : 'flex'}`}>
+    <section className={`w-full lg:w-[600px] border-r border-white/5 flex flex-col bg-[#09090b] h-full relative ${mobileTab === 'preview' ? 'hidden lg:flex' : 'flex'}`}>
       <MessageList 
         messages={messages} 
         isGenerating={isGenerating} 

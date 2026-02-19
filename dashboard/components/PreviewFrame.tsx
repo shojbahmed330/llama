@@ -16,7 +16,7 @@ const PreviewFrame: React.FC<PreviewFrameProps> = ({ workspace, children, appNam
   return (
     <div className={`relative transition-all duration-1000 ease-[cubic-bezier(0.23,1,0.32,1)] ${
       isApp 
-        ? 'w-[290px] h-[580px] shrink-0' 
+        ? 'w-[320px] h-[640px] shrink-0' 
         : 'w-full max-w-[90%] md:max-w-[1000px] aspect-video h-auto'
     }`}>
       
