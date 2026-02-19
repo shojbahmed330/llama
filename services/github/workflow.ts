@@ -39,16 +39,33 @@ jobs:
 
       - name: Initialize and Build
         run: |
+          # Cleanup and Prep
           rm -rf www android
           mkdir -p www
-          cp -r app/* www/ || true
+          
+          # Copy app files if they exist, otherwise use fallback
+          if [ -d "app" ]; then
+            cp -r app/* www/
+          elif [ -f "index.html" ]; then
+            cp index.html www/
+            cp *.js www/ 2>/dev/null || true
+            cp *.css www/ 2>/dev/null || true
+          else
+            echo "<h1>System initializing...</h1>" > www/index.html
+          fi
+
+          # Capacitor Setup
           echo '{"appId": "com.oneclick.studio", "appName": "OneClickApp", "webDir": "www", "bundledWebRuntime": false}' > capacitor.config.json
           if [ ! -f package.json ]; then npm init -y; fi
-          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/assets@latest
+          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
+          
           npx cap add android
-          echo "android.enableJetifier=true" >> android/gradle.properties
-          echo "android.useAndroidX=true" >> android/gradle.properties
-          sed -i 's/JavaVersion.VERSION_17/JavaVersion.VERSION_21/g' android/app/build.gradle
+          
+          # Fix Gradle/Java 21 compatibility
+          if [ -f "android/app/build.gradle" ]; then
+            sed -i 's/JavaVersion.VERSION_17/JavaVersion.VERSION_21/g' android/app/build.gradle
+          fi
+          
           npx cap copy android
           
           # Signing Logic
@@ -56,12 +73,6 @@ jobs:
             echo "Production Keystore Found. Executing Signed Build..."
             cd android && chmod +x gradlew
             ./gradlew assembleRelease \\
-              -Pandroid.injected.signing.store.file=release-key.jks \\
-              -Pandroid.injected.signing.store.password=\${{ env.SIGNING_STORE_PASSWORD }} \\
-              -Pandroid.injected.signing.key.alias=\${{ env.SIGNING_KEY_ALIAS }} \\
-              -Pandroid.injected.signing.key.password=\${{ env.SIGNING_KEY_PASSWORD }}
-            
-            ./gradlew bundleRelease \\
               -Pandroid.injected.signing.store.file=release-key.jks \\
               -Pandroid.injected.signing.store.password=\${{ env.SIGNING_STORE_PASSWORD }} \\
               -Pandroid.injected.signing.key.alias=\${{ env.SIGNING_KEY_ALIAS }} \\
@@ -77,13 +88,6 @@ jobs:
           name: \${{ hashFiles('android/app/release-key.jks') != '' && 'app-release' || 'app-debug' }}
           path: android/app/build/outputs/apk/**/*.apk
 
-      - name: Upload Bundle (AAB)
-        if: hashFiles('android/app/release-key.jks') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release-bundle
-          path: android/app/build/outputs/bundle/release/*.aab
-
   deploy-admin:
     name: Deploy Admin Panel
     runs-on: ubuntu-latest
@@ -96,9 +100,18 @@ jobs:
         uses: actions/configure-pages@v4
         
       - name: Upload Artifact
+        run: |
+          mkdir -p public_admin
+          if [ -d "admin" ]; then
+            cp -r admin/* public_admin/
+          else
+            echo "<h1>Admin panel not generated for this project.</h1>" > public_admin/index.html
+          fi
+
+      - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'admin/'
+          path: 'public_admin/'
 
       - name: Deploy to GitHub Pages
         id: deployment

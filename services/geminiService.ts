@@ -7,40 +7,34 @@ Your goal is to build professional hybrid apps using HTML, CSS, and JS.
 
 ### 🧠 INTELLIGENCE RULES:
 1. **CLARIFICATION FIRST:** 
-   - If a user request is vague (e.g., "Change design", "Add login", "Improve UI"), DO NOT implement immediately.
-   - Instead, generate a "questions" array with multiple-choice options to understand the user's preference.
-   - Example: If user says "Change design", ask "What style? (Minimal, Cyberpunk, Corporate)" and "What color? (Neon, Pastel, Dark)".
+   - If a user request is vague, DO NOT implement immediately. Generate a "questions" array.
+   - **ADMIN PANEL LOGIC:** DO NOT create an Admin Panel by default. Only generate files in the "admin/" directory if:
+     a) The user explicitly asks for it.
+     b) The app is complex (e.g., requires database management, user moderation, or analytics).
+     c) If unsure, ask the user: "Do you need an admin management panel for this app?"
 
 2. **TASK FLOW:**
-   - Once requirements are clear (either via direct prompt or answered questions):
-   - Step A: Provide a detailed "plan" (array of strings).
-   - Step B: Perform a 100% complete implementation of ALL necessary files.
-   - Every file must be fully functional and workable.
+   - Once requirements are clear:
+   - Step A: Provide a detailed "plan".
+   - Step B: Perform a 100% complete implementation of necessary files.
+   - Use "app/" for the main mobile interface and "admin/" for management (if required).
 
 3. **RESUME & EDIT LOGIC:**
    - Always build on top of existing code in "PROJECT MAP".
-   - If adding a feature, integrate it into existing logic perfectly.
+   - Maintain consistency across workspaces.
 
 ### 🚀 RESPONSE FORMAT (JSON ONLY):
 {
-  "thought": "Internal reasoning about why you chose this path...",
-  "questions": [
-    {
-      "id": "unique_id",
-      "text": "Question text...",
-      "type": "single",
-      "options": [{"id": "opt1", "label": "Label", "subLabel": "Details"}]
-    }
-  ],
-  "plan": ["Step 1: Design...", "Step 2: Coding..."],
-  "answer": "A friendly summary of what you are about to do or why you asked questions.",
-  "files": { "path/to/file.js": "..." }
+  "thought": "Internal reasoning...",
+  "questions": [],
+  "plan": [],
+  "answer": "Summary of actions...",
+  "files": { "app/index.html": "...", "admin/index.html": "..." }
 }
 
 ### 🎨 DESIGN RULES:
-- Use Tailwind CSS for styling.
-- Ensure high-end UI/UX with smooth transitions and professional aesthetics.
-- Do not use placeholders; write real, working code.`;
+- Use Tailwind CSS.
+- Ensure high-end UI/UX. No placeholders.`;
 
 export interface GenerationResult {
   files?: Record<string, string>;
@@ -141,7 +135,7 @@ export class GeminiService {
       }
     });
 
-    return `PROJECT MAP (FILES IN WORKSPACE):\n${fullProjectMap.join('\n')}\n\nCURRENT SOURCE CONTENT:\n${JSON.stringify(filteredFiles)}\n\nUSER DIRECTIVE: ${prompt}\n\nINSTRUCTION: If the request is clear, provide a full "plan" and "files". If vague, use the "questions" array to clarify.`;
+    return `PROJECT MAP (FILES IN WORKSPACE):\n${fullProjectMap.join('\n')}\n\nCURRENT SOURCE CONTENT:\n${JSON.stringify(filteredFiles)}\n\nUSER DIRECTIVE: ${prompt}\n\nINSTRUCTION: Admin panel is optional. Use "questions" to ask if one is needed for simple apps.`;
   }
 
   private async generateWithOllama(model: string, prompt: string, history: ChatMessage[], signal?: AbortSignal): Promise<GenerationResult> {
@@ -160,7 +154,7 @@ export class GeminiService {
       }),
       signal
     });
-    if (!response.ok) throw new Error("Ollama connection failed. Ensure server is running with OLLAMA_ORIGINS=*");
+    if (!response.ok) throw new Error("Ollama connection failed.");
     const data = await response.json();
     return JSON.parse(data.message.content);
   }
@@ -182,7 +176,7 @@ export class GeminiService {
       signal
     });
 
-    if (!response.ok) throw new Error("Ollama connection failed. Check your local server.");
+    if (!response.ok) throw new Error("Ollama connection failed.");
     
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
