@@ -58,6 +58,11 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
 
   useEffect(() => {
     projectFilesRef.current = projectFiles;
+    // If current selected file is deleted, pick another one
+    if (selectedFile && !projectFiles[selectedFile]) {
+      const keys = Object.keys(projectFiles);
+      if (keys.length > 0) setSelectedFile(keys[0]);
+    }
   }, [projectFiles]);
 
   const addToast = useCallback((message: string, type: ToastMessage['type'] = 'info') => {
@@ -74,7 +79,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     }
   };
 
-  // Define handleImageSelect to fix the scope error on line 236
   const handleImageSelect = (file: File) => {
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -86,6 +90,49 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
       });
     };
     reader.readAsDataURL(file);
+  };
+
+  const openFile = (path: string) => {
+    setSelectedFile(path);
+    if (!openTabs.includes(path)) {
+      setOpenTabs(prev => [...prev, path]);
+    }
+  };
+
+  const closeFile = (path: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const newTabs = openTabs.filter(t => t !== path);
+    setOpenTabs(newTabs);
+    if (selectedFile === path && newTabs.length > 0) {
+      setSelectedFile(newTabs[newTabs.length - 1]);
+    } else if (newTabs.length === 0) {
+      setSelectedFile('');
+    }
+  };
+
+  const addFile = (path: string) => {
+    if (projectFiles[path]) return;
+    setProjectFiles(prev => ({ ...prev, [path]: '' }));
+    openFile(path);
+  };
+
+  const deleteFile = (path: string) => {
+    const newFiles = { ...projectFiles };
+    delete newFiles[path];
+    setProjectFiles(newFiles);
+    closeFile(path);
+  };
+
+  const renameFile = (oldPath: string, newPath: string) => {
+    if (projectFiles[newPath]) return;
+    const content = projectFiles[oldPath];
+    const newFiles = { ...projectFiles };
+    delete newFiles[oldPath];
+    newFiles[newPath] = content;
+    setProjectFiles(newFiles);
+    
+    setOpenTabs(prev => prev.map(t => t === oldPath ? newPath : t));
+    if (selectedFile === oldPath) setSelectedFile(newPath);
   };
 
   const handleSend = async (customPrompt?: string, isAuto: boolean = false, overrideQueue?: string[]) => {
@@ -178,6 +225,10 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         updatedFiles = { ...updatedFiles, ...res.files };
         setProjectFiles(updatedFiles);
         projectFilesRef.current = updatedFiles;
+        
+        // Auto-open newly created or modified files
+        const firstFile = Object.keys(res.files)[0];
+        if (firstFile) openFile(firstFile);
       }
 
       let nextPlan = res.plan || [];
@@ -237,6 +288,13 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     projectFilesRef.current = project.files || {};
     setMessages(project.messages || []);
     setProjectConfig(project.config || { appName: 'OneClickApp', packageName: 'com.oneclick.studio', selected_model: 'gemini-3-flash-preview' });
+    
+    // Select first file on load
+    const keys = Object.keys(project.files || {});
+    if (keys.length > 0) {
+      setSelectedFile(keys[0]);
+      setOpenTabs([keys[0]]);
+    }
   };
 
   return {
@@ -251,8 +309,8 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     setShowHistory, handleRollback: async () => {}, previewOverride, setPreviewOverride,
     githubConfig, setGithubConfig, handleSend, handleStop, handleBuildAPK: async () => {},
     handleSecureDownload: () => {},
-    loadProject, addFile: (path: string) => {}, deleteFile: (path: string) => {}, renameFile: (o:string,n:string) => {}, 
-    openFile: (p:string) => {}, closeFile: (p:string) => {}, waitingForApproval,
+    loadProject, addFile, deleteFile, renameFile, 
+    openFile, closeFile, waitingForApproval,
     refreshHistory: async () => {}, handleDeleteSnapshot: async () => {}
   };
 };

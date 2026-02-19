@@ -14,11 +14,19 @@ const PreviewLayout: React.FC<PreviewLayoutProps> = ({ props }) => {
     <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative bg-[#09090b]">
       <div className="flex-1 flex flex-col lg:flex-row h-full">
         <ChatBox 
-          messages={props.messages} input={props.input} setInput={props.setInput} 
-          isGenerating={props.isGenerating} handleSend={props.handleSend} mobileTab={props.mobileTab} 
-          selectedImage={props.selectedImage} setSelectedImage={props.setSelectedImage}
+          messages={props.messages} 
+          input={props.input} 
+          setInput={props.setInput} 
+          isGenerating={props.isGenerating} 
+          handleSend={props.handleSend} 
+          handleStop={props.handleStop}
+          currentAction={props.currentAction}
+          mobileTab={props.mobileTab} 
+          selectedImage={props.selectedImage} 
+          setSelectedImage={props.setSelectedImage}
           handleImageSelect={props.handleImageSelect}
           executionQueue={props.executionQueue}
+          waitingForApproval={props.waitingForApproval}
         />
         <MobilePreview 
           projectFiles={props.previewOverride || props.projectFiles} 

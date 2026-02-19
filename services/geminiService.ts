@@ -85,6 +85,8 @@ export class GeminiService {
     signal?: AbortSignal
   ): AsyncIterable<string> {
     
+    if (signal?.aborted) throw new Error("AbortError");
+
     const contextText = this.buildContextString(prompt, currentFiles, activeWorkspace);
 
     if (this.isLocalModel(modelName)) {
