@@ -14,6 +14,10 @@ Your goal is to build professional hybrid apps using HTML, CSS, and JS.
    - Always build on top of all files listed in the "PROJECT MAP".
    - Return 100% complete content for modified files.
 
+3. **RESUME LOGIC:**
+   - If the user says "continue", "finish it", or "ses koro", look at the previous messages. 
+   - If a file was half-written or a plan was interrupted, complete it starting exactly where you left off.
+
 ### 🚀 RESPONSE FORMAT (JSON ONLY):
 {
   "thought": "Internal technical reasoning...",
@@ -77,13 +81,14 @@ export class GeminiService {
     image?: { data: string; mimeType: string },
     projectConfig?: any,
     activeWorkspace?: WorkspaceType,
-    modelName: string = 'gemini-3-flash-preview'
+    modelName: string = 'gemini-3-flash-preview',
+    signal?: AbortSignal
   ): AsyncIterable<string> {
     
     const contextText = this.buildContextString(prompt, currentFiles, activeWorkspace);
 
     if (this.isLocalModel(modelName)) {
-      yield* this.streamWithOllama(modelName, contextText, history);
+      yield* this.streamWithOllama(modelName, contextText, history, signal);
       return;
     }
 
@@ -101,6 +106,7 @@ export class GeminiService {
     });
 
     for await (const chunk of responseStream) {
+      if (signal?.aborted) throw new Error("AbortError");
       if (chunk.text) yield chunk.text;
     }
   }
@@ -126,7 +132,7 @@ export class GeminiService {
     return `PROJECT MAP:\n${fullProjectMap.join('\n')}\n\nCONTENT:\n${JSON.stringify(filteredFiles)}\n\nUSER REQUEST: ${prompt}\n\nINSTRUCTION: ${flowInstruction}`;
   }
 
-  private async generateWithOllama(model: string, prompt: string, history: ChatMessage[]): Promise<GenerationResult> {
+  private async generateWithOllama(model: string, prompt: string, history: ChatMessage[], signal?: AbortSignal): Promise<GenerationResult> {
     const response = await fetch('http://localhost:11434/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -139,14 +145,15 @@ export class GeminiService {
         ],
         stream: false,
         format: 'json'
-      })
+      }),
+      signal
     });
     if (!response.ok) throw new Error("Ollama connection failed. Ensure server is running with OLLAMA_ORIGINS=*");
     const data = await response.json();
     return JSON.parse(data.message.content);
   }
 
-  private async *streamWithOllama(model: string, prompt: string, history: ChatMessage[]): AsyncIterable<string> {
+  private async *streamWithOllama(model: string, prompt: string, history: ChatMessage[], signal?: AbortSignal): AsyncIterable<string> {
     const response = await fetch('http://localhost:11434/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -159,7 +166,8 @@ export class GeminiService {
         ],
         stream: true,
         format: 'json'
-      })
+      }),
+      signal
     });
 
     if (!response.ok) throw new Error("Ollama connection failed. Check your local server.");
@@ -168,19 +176,27 @@ export class GeminiService {
     const decoder = new TextDecoder();
 
     if (reader) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.trim()) {
-            try {
-              const json = JSON.parse(line);
-              if (json.message?.content) yield json.message.content;
-            } catch (e) {}
+      try {
+        while (true) {
+          if (signal?.aborted) {
+             reader.cancel();
+             throw new Error("AbortError");
+          }
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.trim()) {
+              try {
+                const json = JSON.parse(line);
+                if (json.message?.content) yield json.message.content;
+              } catch (e) {}
+            }
           }
         }
+      } finally {
+        reader.releaseLock();
       }
     }
   }

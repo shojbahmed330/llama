@@ -10,6 +10,7 @@ interface ChatBoxProps {
   isGenerating: boolean;
   currentAction?: string | null;
   handleSend: (extraData?: string) => void;
+  handleStop?: () => void;
   mobileTab: 'chat' | 'preview';
   selectedImage: { data: string; mimeType: string; preview: string } | null;
   setSelectedImage: (img: any) => void;
@@ -19,7 +20,7 @@ interface ChatBoxProps {
 }
 
 const ChatBox: React.FC<ChatBoxProps> = ({ 
-  messages, input, setInput, isGenerating, currentAction, handleSend, mobileTab,
+  messages, input, setInput, isGenerating, currentAction, handleSend, handleStop, mobileTab,
   selectedImage, setSelectedImage, handleImageSelect, executionQueue,
   waitingForApproval
 }) => {
@@ -38,6 +39,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
         setInput={setInput}
         isGenerating={isGenerating}
         handleSend={() => handleSend()}
+        handleStop={handleStop}
         selectedImage={selectedImage}
         setSelectedImage={setSelectedImage}
         handleImageSelect={handleImageSelect}

@@ -1,6 +1,6 @@
 
 import React, { useRef } from 'react';
-import { Image as ImageIcon, Send, X, Loader2 } from 'lucide-react';
+import { Image as ImageIcon, Send, X, Loader2, Square } from 'lucide-react';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 interface ChatInputProps {
@@ -8,6 +8,7 @@ interface ChatInputProps {
   setInput: (s: string) => void;
   isGenerating: boolean;
   handleSend: () => void;
+  handleStop?: () => void;
   selectedImage: { data: string; mimeType: string; preview: string } | null;
   setSelectedImage: (img: any) => void;
   handleImageSelect: (file: File) => void;
@@ -15,7 +16,7 @@ interface ChatInputProps {
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
-  input, setInput, isGenerating, handleSend, selectedImage, setSelectedImage, handleImageSelect, executionQueue
+  input, setInput, isGenerating, handleSend, handleStop, selectedImage, setSelectedImage, handleImageSelect, executionQueue
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { t } = useLanguage();
@@ -41,13 +42,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
       <div className={`
         flex items-center gap-4 bg-white/5 border rounded-2xl p-2 transition-all
-        ${isGenerating || isQueued ? 'border-pink-500/40 opacity-50' : 'border-white/10 focus-within:border-pink-500/40'}
+        ${(isGenerating || isQueued) ? 'border-pink-500/40' : 'border-white/10 focus-within:border-pink-500/40'}
       `}>
          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={onFileChange} />
          <button 
            disabled={isGenerating || isQueued}
            onClick={() => fileInputRef.current?.click()} 
-           className="p-3 text-zinc-500 hover:text-white transition-colors"
+           className="p-3 text-zinc-500 hover:text-white transition-colors disabled:opacity-20"
          >
            <ImageIcon size={20}/>
          </button>
@@ -62,13 +63,23 @@ const ChatInput: React.FC<ChatInputProps> = ({
            rows={1}
          />
 
-         <button 
-           onClick={handleSend} 
-           disabled={isGenerating || isQueued || (!input.trim() && !selectedImage)} 
-           className="p-4 bg-pink-600 text-white rounded-xl active:scale-95 disabled:bg-zinc-800 disabled:text-zinc-600 transition-all shadow-lg"
-         >
-           {isGenerating ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>}
-         </button>
+         {isGenerating ? (
+           <button 
+             onClick={handleStop}
+             className="p-4 bg-red-600 text-white rounded-xl active:scale-95 transition-all shadow-lg animate-in zoom-in"
+             title="Stop Generation"
+           >
+             <Square size={18} fill="currentColor"/>
+           </button>
+         ) : (
+           <button 
+             onClick={handleSend} 
+             disabled={isQueued || (!input.trim() && !selectedImage)} 
+             className="p-4 bg-pink-600 text-white rounded-xl active:scale-95 disabled:bg-zinc-800 disabled:text-zinc-600 transition-all shadow-lg"
+           >
+             <Send size={18}/>
+           </button>
+         )}
       </div>
     </div>
   );

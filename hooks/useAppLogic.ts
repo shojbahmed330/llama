@@ -28,6 +28,8 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     packageName: 'com.oneclick.studio',
     selected_model: 'gemini-3-flash-preview'
   });
+  
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [selectedFile, setSelectedFile] = useState('app/index.html');
   const [openTabs, setOpenTabs] = useState<string[]>(['app/index.html']);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -63,13 +65,24 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     setToasts(prev => [...prev, { id, message, type }]);
   }, []);
 
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsGenerating(false);
+      setCurrentAction(null);
+      addToast("AI Output Terminated.", "info");
+    }
+  };
+
+  // Define handleImageSelect to fix the scope error on line 236
   const handleImageSelect = (file: File) => {
     const reader = new FileReader();
     reader.onloadend = () => {
+      const base64 = reader.result as string;
       setSelectedImage({
-        data: (reader.result as string).split(',')[1],
+        data: base64.split(',')[1],
         mimeType: file.type,
-        preview: reader.result as string
+        preview: base64
       });
     };
     reader.readAsDataURL(file);
@@ -80,7 +93,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     const promptText = (customPrompt || input).trim();
     const activeQueue = overrideQueue !== undefined ? overrideQueue : executionQueue;
     
-    // Crucial: Always get the latest model from projectConfig state
     const currentModel = projectConfig.selected_model || 'gemini-3-flash-preview';
 
     if (waitingForApproval && !isAuto) {
@@ -92,7 +104,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         const nextTask = activeQueue[0];
         const newQueue = activeQueue.slice(1);
         setExecutionQueue(newQueue);
-        // Recursively call handleSend but force the current model context
         handleSend(`EXECUTE PHASE: ${nextTask}. IMPLEMENT NOW.`, true, newQueue);
         return;
       } else {
@@ -105,6 +116,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
 
     setIsGenerating(true);
     setCurrentAction("Engineering Node...");
+    abortControllerRef.current = new AbortController();
     
     try {
       const currentImage = selectedImage ? { data: selectedImage.data, mimeType: selectedImage.mimeType } : undefined;
@@ -131,7 +143,8 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         currentImage, 
         projectConfig, 
         workspace,
-        currentModel
+        currentModel,
+        abortControllerRef.current.signal
       );
 
       for await (const chunk of stream) {
@@ -205,10 +218,15 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         await db.supabase.from('projects').update({ messages: finalMessages }).eq('id', currentProjectId);
       }
     } catch (err: any) {
-      addToast(err.message, 'error');
+      if (err.name === 'AbortError') {
+        console.log("Generation aborted by user");
+      } else {
+        addToast(err.message, 'error');
+      }
     } finally {
       setIsGenerating(false);
       setCurrentAction(null);
+      abortControllerRef.current = null;
     }
   };
 
@@ -231,7 +249,7 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     buildStatus, setBuildStatus, buildSteps, isDownloading, selectedImage,
     setSelectedImage, handleImageSelect, history, isHistoryLoading, showHistory,
     setShowHistory, handleRollback: async () => {}, previewOverride, setPreviewOverride,
-    githubConfig, setGithubConfig, handleSend, handleBuildAPK: async () => {},
+    githubConfig, setGithubConfig, handleSend, handleStop, handleBuildAPK: async () => {},
     handleSecureDownload: () => {},
     loadProject, addFile: (path: string) => {}, deleteFile: (path: string) => {}, renameFile: (o:string,n:string) => {}, 
     openFile: (p:string) => {}, closeFile: (p:string) => {}, waitingForApproval,
