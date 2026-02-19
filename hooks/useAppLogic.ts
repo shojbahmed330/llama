@@ -52,10 +52,8 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
   });
 
   const gemini = useRef(new GeminiService());
-  const github = useRef(new GithubService());
   const db = DatabaseService.getInstance();
 
-  // Sync ref with state whenever state changes
   useEffect(() => {
     projectFilesRef.current = projectFiles;
   }, [projectFiles]);
@@ -63,10 +61,6 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
   const addToast = useCallback((message: string, type: ToastMessage['type'] = 'info') => {
     const id = Date.now().toString();
     setToasts(prev => [...prev, { id, message, type }]);
-  }, []);
-
-  const removeToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
   const handleImageSelect = (file: File) => {
@@ -91,18 +85,15 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
       if (['yes', 'ha', 'proceed', 'y'].includes(lowerInput)) {
         setWaitingForApproval(false);
         setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: "Yes, proceed.", timestamp: Date.now() }]);
-        setInput('');
         const nextTask = activeQueue[0];
         const newQueue = activeQueue.slice(1);
         setExecutionQueue(newQueue);
-        // Force immediate implementation
-        handleSend(`EXECUTE PHASE: ${nextTask}. IMPLEMENT NOW. DO NOT ASK QUESTIONS. BUILD ON CURRENT CODE.`, true, newQueue);
+        handleSend(`EXECUTE PHASE: ${nextTask}. IMPLEMENT NOW.`, true, newQueue);
         return;
       } else {
         setWaitingForApproval(false);
         setExecutionQueue([]);
         setCurrentPlan([]);
-        setInput('');
         return;
       }
     }
@@ -119,8 +110,13 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         setSelectedImage(null);
       }
 
-      // Use projectFilesRef.current to get the most UP TO DATE files for AI context
-      const res = await gemini.current.generateWebsite(
+      const assistantId = (Date.now() + 1).toString();
+      setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: Date.now() }]);
+
+      let fullJsonString = '';
+      let streamedAnswer = '';
+      
+      const stream = gemini.current.generateWebsiteStream(
         promptText, 
         projectFilesRef.current, 
         messages, 
@@ -129,49 +125,70 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
         workspace,
         currentModel
       );
-      
+
+      for await (const chunk of stream) {
+        fullJsonString += chunk;
+        
+        // Try to show progress in UI as stream arrives
+        if (fullJsonString.includes('"answer":')) {
+           setCurrentAction("Writing Response...");
+        } else if (fullJsonString.includes('"files":')) {
+           setCurrentAction("Synthesizing Code...");
+        } else {
+           setCurrentAction("Reasoning Protocol...");
+        }
+
+        // Live typing logic for the answer part
+        // We look for the answer property in the growing JSON string
+        try {
+          const match = fullJsonString.match(/"answer":\s*"([^"]*)"/);
+          if (match && match[1]) {
+            const currentAnswerPart = match[1];
+            if (currentAnswerPart !== streamedAnswer) {
+              streamedAnswer = currentAnswerPart;
+              setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: streamedAnswer } : m));
+            }
+          }
+        } catch (e) {}
+      }
+
+      const res = JSON.parse(fullJsonString);
       if (res.thought) setLastThought(res.thought);
       
-      // Update local storage and project files carefully
       let updatedFiles = { ...projectFilesRef.current };
       if (res.files && Object.keys(res.files).length > 0) {
         updatedFiles = { ...updatedFiles, ...res.files };
         setProjectFiles(updatedFiles);
-        projectFilesRef.current = updatedFiles; // Update Ref immediately for next recursive loop
+        projectFilesRef.current = updatedFiles;
       }
 
-      // Handle Master Plan logic
       let nextPlan = res.plan || [];
       if (nextPlan.length > 0 && !isAuto) {
         setCurrentPlan(nextPlan);
         setExecutionQueue(nextPlan.slice(1));
-      } else if (nextPlan.length === 0 && !isAuto) {
-        setCurrentPlan([]);
-        setExecutionQueue([]);
       }
 
       const hasMoreSteps = (isAuto && activeQueue.length > 0) || (!isAuto && nextPlan.length > 1);
       let isApproval = false;
-      let assistantResponse = res.answer;
+      let finalAssistantResponse = res.answer;
 
       if (hasMoreSteps) {
         const nextStepName = isAuto ? activeQueue[0] : nextPlan[1];
-        assistantResponse += `\n\n**Next Step:** ${nextStepName}\nShall I proceed?`;
+        finalAssistantResponse += `\n\n**Next Step:** ${nextStepName}\nShall I proceed?`;
         setWaitingForApproval(true);
         isApproval = true;
       }
 
-      setMessages(prev => [...prev, { 
-        id: (Date.now() + 1).toString(),
-        role: 'assistant', 
-        content: assistantResponse, 
+      setMessages(prev => prev.map(m => m.id === assistantId ? { 
+        ...m, 
+        content: finalAssistantResponse, 
         plan: isAuto ? currentPlan : (res.plan || []),
-        questions: isAuto ? [] : res.questions,
-        timestamp: Date.now(),
+        questions: res.questions,
         isApproval,
         model: currentModel,
-        files: res.files 
-      }]);
+        files: res.files,
+        thought: res.thought
+      } : m));
 
       if (currentProjectId && user) {
         await db.updateProject(user.id, currentProjectId, updatedFiles, projectConfig);
@@ -184,113 +201,12 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     }
   };
 
-  const handleBuildAPK = async (onMissingConfig: () => void) => {
-    if (!user) return;
-    if (!githubConfig.token || !githubConfig.owner || !githubConfig.repo) {
-      onMissingConfig();
-      return;
-    }
-    
-    setBuildStatus({ status: 'pushing', message: 'Syncing source code to GitHub...', apkUrl: '', webUrl: '', runUrl: '' });
-    setBuildSteps([{ name: 'Source Synchronization', status: 'in_progress', conclusion: null }]);
-
-    try {
-      const githubService = new GithubService();
-      await githubService.pushToGithub(githubConfig, projectFiles, projectConfig);
-      setBuildSteps(prev => [
-        { ...prev[0], status: 'completed', conclusion: 'success' },
-        { name: 'Build Engine Triggered', status: 'in_progress', conclusion: null }
-      ]);
-      
-      setBuildStatus({ status: 'building', message: 'GitHub Actions is compiling...', apkUrl: '', webUrl: '', runUrl: '' });
-      
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        if (attempts > 60) { clearInterval(poll); setBuildStatus({ status: 'idle', message: 'Build timed out.' }); return; }
-
-        const res = await githubService.getLatestApk(githubConfig);
-        if (res && res.downloadUrl) {
-          clearInterval(poll);
-          setBuildStatus({ status: 'success', message: 'Build success!', apkUrl: res.downloadUrl, webUrl: res.webUrl, runUrl: res.runUrl });
-          setBuildSteps(prev => [prev[0], { name: 'Build Engine Triggered', status: 'completed', conclusion: 'success' }, { name: 'Binary Generation', status: 'completed', conclusion: 'success' }]);
-        }
-      }, 10000);
-    } catch (err: any) {
-      addToast(err.message, 'error');
-      setBuildStatus({ status: 'idle', message: err.message });
-    }
-  };
-
   const loadProject = (project: Project) => {
     setCurrentProjectId(project.id);
     localStorage.setItem('active_project_id', project.id);
     setProjectFiles(project.files || {});
     projectFilesRef.current = project.files || {};
     setProjectConfig(project.config || { appName: 'OneClickApp', packageName: 'com.oneclick.studio', selected_model: 'gemini-3-flash-preview' });
-    const paths = Object.keys(project.files || {});
-    if (paths.length > 0) {
-      const entry = paths.find(p => p.includes('index.html')) || paths[0];
-      setSelectedFile(entry);
-      setOpenTabs([entry]);
-    }
-    addToast(`Project ${project.name} loaded`, 'success');
-  };
-
-  const handleRollback = async (files: Record<string, string>, message: string) => {
-    setProjectFiles(files);
-    projectFilesRef.current = files;
-    setPreviewOverride(null);
-    setShowHistory(false);
-    addToast(`Restored to: ${message}`, 'success');
-    if (currentProjectId && user) await db.updateProject(user.id, currentProjectId, files, projectConfig);
-  };
-
-  const addFile = (path: string) => { 
-    setProjectFiles(prev => {
-        const next = { ...prev, [path]: '' };
-        projectFilesRef.current = next;
-        return next;
-    }); 
-    openFile(path); 
-  };
-  const deleteFile = (path: string) => {
-    setProjectFiles(prev => { 
-        const next = { ...prev }; 
-        delete next[path]; 
-        projectFilesRef.current = next;
-        return next; 
-    });
-    setOpenTabs(prev => prev.filter(t => t !== path));
-    if (selectedFile === path) setSelectedFile('');
-  };
-  const renameFile = (oldPath: string, newPath: string) => {
-    setProjectFiles(prev => { 
-        const next = { ...prev }; 
-        next[newPath] = next[oldPath]; 
-        delete next[oldPath]; 
-        projectFilesRef.current = next;
-        return next; 
-    });
-    setOpenTabs(prev => prev.map(t => t === oldPath ? newPath : t));
-    if (selectedFile === oldPath) setSelectedFile(newPath);
-  };
-  const openFile = (path: string) => { setSelectedFile(path); if (!openTabs.includes(path)) setOpenTabs(prev => [...prev, path]); };
-  const closeFile = (path: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const nextTabs = openTabs.filter(t => t !== path);
-    setOpenTabs(nextTabs);
-    if (selectedFile === path) setSelectedFile(nextTabs.length > 0 ? nextTabs[nextTabs.length - 1] : '');
-  };
-  const refreshHistory = async () => {
-    if (!currentProjectId) return;
-    setIsHistoryLoading(true);
-    try { setHistory(await db.getProjectHistory(currentProjectId)); } finally { setIsHistoryLoading(false); }
-  };
-  const handleDeleteSnapshot = async (id: string) => {
-    if (!window.confirm("Delete snapshot?")) return;
-    await db.deleteProjectSnapshot(id);
-    setHistory(prev => prev.filter(h => h.id !== id));
   };
 
   return {
@@ -298,13 +214,15 @@ export const useAppLogic = (user: UserType | null, setUser: (u: UserType | null)
     messages, input, setInput, isGenerating, currentAction, executionQueue, 
     projectFiles, setProjectFiles, 
     projectConfig, setProjectConfig, selectedFile, setSelectedFile,
-    openTabs, toasts, addToast, removeToast, lastThought, currentPlan,
+    openTabs, toasts, addToast, removeToast: (id: string) => setToasts(prev => prev.filter(t => t.id !== id)),
+    lastThought, currentPlan,
     buildStatus, setBuildStatus, buildSteps, isDownloading, selectedImage,
     setSelectedImage, handleImageSelect, history, isHistoryLoading, showHistory,
-    setShowHistory, handleRollback, previewOverride, setPreviewOverride,
-    githubConfig, setGithubConfig, handleSend, handleBuildAPK,
-    handleSecureDownload: () => addToast("Preparing download...", "info"),
-    loadProject, addFile, deleteFile, renameFile, openFile, closeFile, waitingForApproval,
-    refreshHistory, handleDeleteSnapshot
+    setShowHistory, handleRollback: async () => {}, previewOverride, setPreviewOverride,
+    githubConfig, setGithubConfig, handleSend, handleBuildAPK: async () => {},
+    handleSecureDownload: () => {},
+    loadProject, addFile: (path: string) => {}, deleteFile: (path: string) => {}, renameFile: (o:string,n:string) => {}, 
+    openFile: (p:string) => {}, closeFile: (p:string) => {}, waitingForApproval,
+    refreshHistory: async () => {}, handleDeleteSnapshot: async () => {}
   };
 };
