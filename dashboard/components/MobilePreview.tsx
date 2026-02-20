@@ -30,7 +30,6 @@ const MobilePreview: React.FC<MobilePreviewProps> = ({
   const [showSplash, setShowSplash] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const qrRef = useRef<HTMLDivElement>(null);
-  const [copied, setCopied] = useState(false);
   const [renderVersion, setRenderVersion] = useState(0);
   const { t } = useLanguage();
   
@@ -54,29 +53,6 @@ const MobilePreview: React.FC<MobilePreviewProps> = ({
   }, [isGenerating, hasFiles]);
 
   useEffect(() => {
-    if (showQrModal && previewUrl && qrRef.current) {
-        qrRef.current.innerHTML = '';
-        const generate = () => {
-            // @ts-ignore
-            if (window.QRCode) {
-                // @ts-ignore
-                new window.QRCode(qrRef.current, {
-                    text: previewUrl,
-                    width: 200,
-                    height: 200,
-                    colorDark: "#ec4899",
-                    colorLight: "#ffffff",
-                    correctLevel: 2
-                });
-            } else {
-                setTimeout(generate, 300);
-            }
-        };
-        generate();
-    }
-  }, [showQrModal, previewUrl]);
-
-  useEffect(() => {
     if (hasFiles && !isGenerating) {
       setShowSplash(true);
       const timer = setTimeout(() => setShowSplash(false), 1500);
@@ -85,14 +61,17 @@ const MobilePreview: React.FC<MobilePreviewProps> = ({
   }, [hasFiles, isGenerating, workspace]);
 
   return (
-    <section className={`flex-1 flex flex-col items-center lg:items-start lg:justify-center lg:pl-20 relative h-full transition-all duration-700 ${mobileTab === 'chat' ? 'hidden lg:flex' : 'flex'}`}>
+    <section className={`flex-1 flex flex-col items-center lg:items-start lg:justify-center lg:pl-40 relative h-full transition-all duration-1000 ${mobileTab === 'chat' ? 'hidden lg:flex' : 'flex'}`}>
       
-      <div className={`w-[320px] mb-6 hidden lg:block transition-all duration-500 z-40 ${isGenerating && isInitialLoad ? 'opacity-0 pointer-events-none -translate-y-4' : 'opacity-100 translate-y-0'}`}>
+      <div className={`w-[320px] mb-8 hidden lg:block transition-all duration-700 z-40 ${isGenerating && isInitialLoad ? 'opacity-0 pointer-events-none -translate-y-6' : 'opacity-100 translate-y-0'}`}>
         <WorkspaceToggle active={workspace} onChange={setWorkspace} />
       </div>
 
       <div className="w-full h-full lg:h-auto lg:flex-1 flex flex-col items-center lg:items-start justify-center p-0 lg:p-4">
-          <div className="relative group/preview-container transition-transform duration-500 hover:scale-[1.01]">
+          <div className="relative group/preview-container transition-all duration-700 hover:scale-[1.02]">
+             {/* Dynamic Glow Background */}
+             <div className={`absolute -inset-4 blur-[40px] opacity-0 group-hover/preview-container:opacity-20 transition-opacity duration-700 rounded-[4rem] -z-10 ${workspace === 'admin' ? 'bg-indigo-500' : 'bg-pink-500'}`}></div>
+             
              <PreviewFrame workspace={workspace} appName={projectConfig?.appName}>
                <div className="w-full h-full bg-[#09090b] relative flex flex-col items-center justify-center overflow-hidden">
                  {hasFiles ? (

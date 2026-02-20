@@ -17,7 +17,7 @@ const PreviewFrame: React.FC<PreviewFrameProps> = ({ workspace, children, appNam
     <div className={`relative transition-all duration-1000 ease-[cubic-bezier(0.23,1,0.32,1)] ${
       isApp 
         ? 'w-full lg:w-[320px] h-full lg:h-[640px] shrink-0' 
-        : 'w-full max-w-full md:max-w-[1000px] aspect-video h-full lg:h-auto'
+        : 'w-full max-w-full md:max-w-[1200px] aspect-video h-full lg:h-auto'
     }`}>
       
       {/* GLOW BACKGROUND EFFECT */}
