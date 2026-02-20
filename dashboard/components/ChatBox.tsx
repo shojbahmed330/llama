@@ -2,6 +2,7 @@
 import React from 'react';
 import MessageList from './chat/MessageList';
 import ChatInput from './chat/ChatInput';
+import ChatEmptyState from './chat/ChatEmptyState';
 
 interface ChatBoxProps {
   messages: any[];
@@ -25,14 +26,26 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   waitingForApproval
 }) => {
   return (
-    <section className={`w-full lg:w-[600px] border-r border-white/5 flex flex-col bg-[#09090b] h-full relative ${mobileTab === 'preview' ? 'hidden lg:flex' : 'flex'}`}>
-      <MessageList 
-        messages={messages} 
-        isGenerating={isGenerating} 
-        currentAction={currentAction}
-        handleSend={handleSend} 
-        waitingForApproval={waitingForApproval}
-      />
+    <section className={`w-full lg:w-[540px] xl:w-[600px] border-r border-white/5 flex flex-col bg-[#09090b] h-full relative transition-all duration-500 ${mobileTab === 'preview' ? 'hidden lg:flex' : 'flex'}`}>
+      <div className="flex-1 flex flex-col overflow-hidden relative shadow-[20px_0_50px_rgba(0,0,0,0.3)] z-10">
+        {messages.length > 0 ? (
+          <MessageList 
+            messages={messages} 
+            isGenerating={isGenerating} 
+            currentAction={currentAction}
+            handleSend={handleSend} 
+            waitingForApproval={waitingForApproval}
+          />
+        ) : (
+          <div className="flex-1 overflow-y-auto">
+            <ChatEmptyState onTemplateClick={(prompt) => {
+              setInput(prompt);
+              // Wait for state to settle then send
+              setTimeout(() => handleSend(), 100);
+            }} />
+          </div>
+        )}
+      </div>
 
       <ChatInput 
         input={input}

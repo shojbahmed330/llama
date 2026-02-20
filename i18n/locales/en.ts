@@ -2,13 +2,13 @@
 export const en = {
   nav: {
     preview: "PREVIEW",
-    edit: "EDIT",
+    edit: "CODE",
     projects: "PROJECTS",
     shop: "SHOP",
     profile: "PROFILE",
     admin: "ADMIN HQ",
     help: "HELP",
-    settings: "SETTINGS",
+    settings: "SETTING",
     login: "LOGIN",
     get_started: "GET STARTED"
   },

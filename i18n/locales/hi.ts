@@ -2,13 +2,13 @@
 export const hi = {
   nav: {
     preview: "पूर्वावलोकन",
-    edit: "संपादन",
+    edit: "CODE",
     projects: "परियोजनाएं",
-    shop: "दुकान",
+    shop: "दुकান",
     profile: "प्रोफ़ाइल",
     admin: "एडमिन मुख्यालय",
     help: "सहायता",
-    settings: "सेटिंग्स",
+    settings: "SETTING",
     login: "लॉगिन",
     get_started: "शुरू करें"
   },

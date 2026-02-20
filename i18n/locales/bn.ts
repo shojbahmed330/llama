@@ -2,13 +2,13 @@
 export const bn = {
   nav: {
     preview: "প্রিভিউ",
-    edit: "এডিট",
+    edit: "কোড",
     projects: "প্রজেক্টস",
     shop: "শপ",
     profile: "প্রোফাইল",
     admin: "এডমিন HQ",
     help: "সাহায্য",
-    settings: "সেটিংস",
+    settings: "সেটিং",
     login: "লগইন",
     get_started: "শুরু করুন"
   },
